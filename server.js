@@ -943,7 +943,7 @@ async function checkWeeklyReset() {
       await lotteryDao.updateLottery({
         winners: JSON.stringify(lottery.winners),
         banner_cleared_at: new Date(lottery.lastClear).toISOString().slice(0, 19).replace('T', ' '),
-        last_clear: lottery.lastClear
+        last_clear: new Date(lottery.lastClear).toISOString().slice(0, 19).replace('T', ' ')
       });
 
       // 异步同步到云数据库
@@ -1488,7 +1488,7 @@ app.post('/api/lottery/clear-winners', async (req, res) => {
     await lotteryDao.updateLottery({
       winners: JSON.stringify(lottery.winners),
       banner_cleared_at: new Date(lottery.bannerClearedAt).toISOString().slice(0, 19).replace('T', ' '),
-      last_clear: lottery.lastClear
+      last_clear: new Date(lottery.lastClear).toISOString().slice(0, 19).replace('T', ' ')
     });
 
     // 异步同步到云数据库
