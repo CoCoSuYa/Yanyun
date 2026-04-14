@@ -161,14 +161,14 @@ export async function submitLogin() {
   if (!name) return showGErr(errEl, '游戏名不可为空');
   if (!pwd) return showGErr(errEl, '密码不可为空');
 
-  setButtonLoading(document.getElementById('l-submit'), true);
+  setButtonLoading(document.getElementById('l-name'), true);
   try {
     const user = await api('POST', '/api/auth/login', { gameName: name, password: pwd });
     onLoginSuccess(user);
   } catch (e) {
     showGErr(errEl, e.message);
   } finally {
-    setButtonLoading(document.getElementById('l-submit'), false);
+    setButtonLoading(document.getElementById('l-name'), false);
   }
 }
 
@@ -190,14 +190,14 @@ export async function submitRegister() {
   if (!pwd || pwd.length < 6) return showGErr(errEl, '密码不可少于6位');
   if (pwd !== pwd2) return showGErr(errEl, '两次密码输入不一致');
 
-  setButtonLoading(document.getElementById('r-submit'), true);
+  setButtonLoading(document.getElementById('r-name'), true);
   try {
     const user = await api('POST', '/api/users', { gameName: name, guildName: guild, mainStyle: main, subStyle: sub, password: pwd });
     onLoginSuccess(user);
   } catch (e) {
     showGErr(errEl, e.message);
   } finally {
-    setButtonLoading(document.getElementById('r-submit'), false);
+    setButtonLoading(document.getElementById('r-name'), false);
   }
 }
 
@@ -230,6 +230,41 @@ function onLoginSuccess(user) {
 }
 
 function checkPendingJoin() {
-  // 延迟到 init.js 设置后调用
-  if (window._checkPendingJoinFn) window._checkPendingJoinFn();
+  // 通过 init.js 设置的回调调用 team.js 的 checkPendingJoin
+  if (_onLoginSuccessFns && _onLoginSuccessFns.checkPendingJoin) {
+    _onLoginSuccessFns.checkPendingJoin();
+  }
 }
+
+// ---- 修改队伍时间弹窗（供 team.js 回调调用）----
+export function showEditTimeModal(team) {
+  openModal('修改开本时间', `
+<div class="fg">
+  <label class="fl">当前时间</label>
+  <input class="fi" id="e-time-old" value="${team.time}" disabled style="opacity:.5">
+</div>
+<div class="fg">
+  <label class="fl">新时间 <span class="req">*</span></label>
+  <input class="fi" id="e-time-new" type="time" value="${team.time}">
+</div>
+<div class="global-err" id="e-time-err"></div>
+<div class="fbtns">
+  <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+  <button class="btn btn-primary" onclick="submitTeamTimeEdit('${team.id}')">确认修改</button>
+</div>
+  `);
+}
+
+window.submitTeamTimeEdit = async function(teamId) {
+  const newTime = document.getElementById('e-time-new').value;
+  const errEl = document.getElementById('e-time-err');
+  if (!newTime) return showGErr(errEl, '请选择时间');
+  try {
+    await api('PUT', `/api/teams/${teamId}/time`, { adminId: S.user.id, time: newTime });
+    closeModal();
+    renderTeams();
+    toast('开本时间已更新');
+  } catch (e) {
+    showGErr(errEl, e.message);
+  }
+};

@@ -3,7 +3,7 @@
 // ====================================================
 import { S } from './state.js';
 import { esc, localDateStr, isPast, isToday, weekday, fmtTime, fmtDateLabel, dateRange } from './utils.js';
-import { amIAdmin } from './ui.js';
+import { amIAdmin } from './state.js';
 import { updateLazyLoading } from './images.js';
 
 export function getUserAvatar(u) {
@@ -63,7 +63,7 @@ function _doRenderUserList() {
         <span class="style-tag">${esc(u.mainStyle)}${u.subStyle ? ` · ${esc(u.subStyle)}` : ''}</span>
       </div>
       <div class="user-meta">
-        <span class="user-rank">${getRankLabel(rank)}</span>
+        <span class="user-rank">${getRankLabel(index + 1)}</span>
         <span class="user-sign-days">${signInCount}天</span>
       </div>
     </div>`;

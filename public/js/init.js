@@ -11,17 +11,19 @@ import {
   setSelectDateFn, setHandleCardClickFn, setShowKickPopupFn,
   setCheckPendingJoinFn, setRenderLotteryRecordsFn
 } from './render.js';
-import { selectDate, _selectDate, toggleSidebar, handleMyBadgeClick,
+import { selectDate, toggleSidebar, handleMyBadgeClick,
   handleCardClick, showKickPopup, checkPendingJoin,
   doJoin, doLeave, doKick, doDissolve, applyTeamResult,
-  handleUserItemClick, setupDateSwipe, doLogout
+  handleUserItemClick, setupDateSwipe, doLogout,
+  setEditModalFn as teamSetEditModalFn,
+  setShowEditTimeModalFn as teamSetShowEditTimeModalFn
 } from './team.js';
 import { handleCreateTeam, submitCreate } from './team-create.js';
 import { showIdentityModal, switchAuthTab, submitLogin, submitRegister,
-  showEditModal, submitEdit, setOnLoginCallbacks } from './auth.js';
+  showEditModal, submitEdit, showEditTimeModal, setOnLoginCallbacks } from './auth.js';
 import {
   LOT, initLottery, handleLotteryEntryClick, openLottery, closeLottery,
-  updateSpinButton, renderSlotRing, redrawWheel, renderLotteryRecords,
+  handleSpin, updateSpinButton, renderSlotRing, redrawWheel, renderLotteryRecords,
   adminClearBanner, adminClearWinners, submitAddCount, updateWinnerBanner
 } from './lottery.js';
 import {
@@ -58,7 +60,8 @@ createSetAuthFn(showIdentityModal);
 setOnLoginCallbacks({
   onInitSignIn: () => { clearCachedNotices(); initSignInFromUserData(); },
   checkUnreadMessages,
-  showLatestUnreadNotice
+  showLatestUnreadNotice,
+  checkPendingJoin
 });
 
 // message-box.js 需要 auth 模块
@@ -103,15 +106,15 @@ window.postNotice = postNotice;
 window.deleteMsg = deleteMsg;
 window.openMsgDetail = openMsgDetail;
 window.markMsgAsRead = markMsgAsRead;
-window.closeModal = (() => {
-  const { closeModal: cm } = await import('./ui.js');
-  return cm;
-})(); // 简化：直接从 ui 导入
 
 // ui.js 的 closeModal 和 toast 也挂载（HTML 内联 onclick 使用）
 import { closeModal, toast as uiToast } from './ui.js';
 window.closeModal = closeModal;
 window.toast = uiToast;
+
+// ---- 补充 team.js 需要的 auth 模块绑定 ----
+teamSetEditModalFn(showEditModal);
+teamSetShowEditTimeModalFn(showEditTimeModal);
 
 // ---- 启动应用 ----
 async function init() {

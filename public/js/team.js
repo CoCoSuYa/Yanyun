@@ -1,40 +1,15 @@
 // ====================================================
 // 队伍交互：选日期 / 入队 / 离队 / 踢人 / 解散 / 邀约
 // ====================================================
-import { S } from './state.js';
+import { S, amIAdmin } from './state.js';
 import { isPast, todayStr, toLocalDTStr, esc, dateRange, localDateStr } from './utils.js';
 import { api, showLoading, hideLoading } from './api.js';
 import { openModal, closeModal, showPopup, toast, confirm2 } from './ui.js';
-import { amIAdmin } from './ui.js';
-import { renderTeams, updateMyBadge, renderUserList, forceRenderUserList } from './render.js';
+import { renderTeams, updateMyBadge, renderUserList, forceRenderUserList, renderDateRow } from './render.js';
 
 export function selectDate(ds, dir) {
   S.date = ds;
-  // 通过 import 的方式调用渲染函数
-  const { renderDateRow } = requireDynamic('./render.js');
   renderDateRow();
-  renderTeams();
-  if (dir) {
-    const wrap = document.getElementById('teamsWrap');
-    const cls = dir === 'left' ? 'slide-left' : 'slide-right';
-    wrap.classList.remove('slide-left', 'slide-right');
-    void wrap.offsetWidth;
-    wrap.classList.add(cls);
-    wrap.addEventListener('animationend', () => wrap.classList.remove(cls), { once: true });
-  }
-}
-
-// 动态导入 helper (避免循环依赖)
-function requireDynamic(path) {
-  // 由于所有模块都是同步加载的，这里直接引用即可
-  return { renderDateRow: null }; // placeholder - 实际由 init.js 处理绑定
-}
-
-// selectDate 的正确实现（不依赖动态 import）
-export function _selectDate(ds, dir) {
-  S.date = ds;
-  // 渲染函数在 init.js 中通过回调设置
-  if (typeof window._renderDateRowFn === 'function') window._renderDateRowFn();
   renderTeams();
   if (dir) {
     const wrap = document.getElementById('teamsWrap');
@@ -240,9 +215,9 @@ export function setupDateSwipe() {
     const dates = dateRange().map(d => localDateStr(d));
     const idx = dates.indexOf(S.date);
     if (dx < 0 && idx < dates.length - 1) {
-      _selectDate(dates[idx + 1], 'left');
+      selectDate(dates[idx + 1], 'left');
     } else if (dx > 0 && idx > 0) {
-      _selectDate(dates[idx - 1], 'right');
+      selectDate(dates[idx - 1], 'right');
     }
   }, { passive: true });
 }
