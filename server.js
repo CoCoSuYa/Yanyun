@@ -938,13 +938,13 @@ async function checkWeeklyReset() {
     lottery.winners = [];
     lottery.lastClear = now.toISOString();
 
-    try {
-      // 更新MySQL（banner_cleared_at 用 ISO 格式，last_clear 用时间戳）
-      await lotteryDao.updateLottery({
-        winners: JSON.stringify(lottery.winners),
-        banner_cleared_at: lottery.lastClear,
-        last_clear: new Date(lottery.lastClear).getTime()
-      });
+  try {
+    // 更新MySQL（banner_cleared_at 转换为 MySQL DATETIME 格式，last_clear 用时间戳）
+    await lotteryDao.updateLottery({
+      winners: JSON.stringify(lottery.winners),
+      banner_cleared_at: new Date(lottery.lastClear).toISOString().slice(0, 19).replace('T', ' '),
+      last_clear: new Date(lottery.lastClear).getTime()
+    });
 
       // 异步同步到云数据库
       syncToCloud('lottery', 'global_state', {
@@ -1451,9 +1451,9 @@ app.post('/api/lottery/clear-banner', async (req, res) => {
   lottery.bannerClearedAt = new Date().toISOString();
 
   try {
-    // 更新MySQL（banner_cleared_at 用 ISO 格式）
+    // 更新MySQL（banner_cleared_at 转换为 MySQL DATETIME 格式）
     await lotteryDao.updateLottery({
-      banner_cleared_at: lottery.bannerClearedAt
+      banner_cleared_at: new Date(lottery.bannerClearedAt).toISOString().slice(0, 19).replace('T', ' ')
     });
 
     // 异步同步到云数据库
@@ -1484,10 +1484,10 @@ app.post('/api/lottery/clear-winners', async (req, res) => {
   lottery.lastClear = new Date().toISOString();
 
   try {
-    // 更新MySQL（banner_cleared_at 用 ISO 格式，last_clear 用时间戳）
+    // 更新MySQL（banner_cleared_at 转换为 MySQL DATETIME 格式，last_clear 用时间戳）
     await lotteryDao.updateLottery({
       winners: JSON.stringify(lottery.winners),
-      banner_cleared_at: lottery.bannerClearedAt,
+      banner_cleared_at: new Date(lottery.bannerClearedAt).toISOString().slice(0, 19).replace('T', ' '),
       last_clear: new Date(lottery.lastClear).getTime()
     });
 
