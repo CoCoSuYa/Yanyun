@@ -139,7 +139,8 @@ async function checkAndSync(tableName, cloudDoc) {
 // 动态 UPSERT（自动适配不同表的字段）
 async function upsertRecord(conn, tableName, cloudDoc) {
   // 过滤掉云库内部字段和同步元数据字段
-  const skipFields = new Set(['_id', '_openid', '_syncVersion', '_dataSource', 'updatedAt', '_createdAt']);
+  // 注意：过滤掉 'id' 字段，因为我们用 _id 作为主键
+  const skipFields = new Set(['_id', '_openid', '_syncVersion', '_dataSource', 'updatedAt', '_createdAt', 'id']);
   
   // 字段名映射：云库 camelCase → MySQL snake_case
   const fieldMap = {
