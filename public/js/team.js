@@ -144,15 +144,10 @@ export function handleCardClick(e, team) {
   showPopup(e, actions);
 }
 
-// 复制队伍分享链接
+// 分享队伍：打开分享页（引导用户转发到微信）
 function copyShareLink(team) {
-  const url = `${location.origin}${location.pathname}?join=${team.id}`;
-  navigator.clipboard.writeText(url).then(() => {
-    toast('链接已复制，可发送给好友');
-  }).catch(() => {
-    // fallback: 显示链接让用户手动复制
-    openModal('复制邀请链接', `<div style="word-break:break-all;font-size:13px;color:var(--text-dim);padding:8px 0">${esc(url)}</div><div class="fbtns"><button class="btn btn-ghost" onclick="closeModal()">关闭</button></div>`);
-  });
+  const u = JSON.parse(localStorage.getItem('yanyun_user') || '{}');
+  window.open(`/share.html?join=${team.id}&from=${u.id || 0}`, '_blank', 'width=400,height=600');
 }
 
 export function showKickPopup(e, team, uid) {
