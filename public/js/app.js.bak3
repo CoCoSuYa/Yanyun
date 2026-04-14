@@ -1,0 +1,2615 @@
+// ====================================================
+// 移动端检测与优化配置
+// ====================================================
+const DEVICE = {
+  isMobile: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent),
+  isSlowNetwork: false
+};
+
+if ('connection' in navigator) {
+  const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  if (conn) {
+    DEVICE.isSlowNetwork = conn.effectiveType === 'slow-2g' || conn.effectiveType === '2g';
+  }
+}
+
+const MOBILE_CONFIG = {
+  pollInterval: DEVICE.isMobile ? 10000 : 5000,
+  initialUserLimit: DEVICE.isMobile ? 30 : 100,
+  disableAnimations: DEVICE.isSlowNetwork
+};
+
+// ====================================================
+// 状态
+// ====================================================
+const S = {
+  user: null,        // 当前用户
+  users: [],
+  teams: [],
+  date: null,        // 当前选中日期 YYYY-MM-DD
+  ws: null,
+  pollTimer: null,
+  pendingAction: null,
+  pendingJoin: null, // 分享链接携带的队伍ID，登录后自动触发入队
+};
+
+// 管理员判断：读取 isAdmin 字段，不依赖特定游戏名
+function amIAdmin() { return !!(S.user && S.user.isAdmin); }
+
+// ====================================================
+// 日期工具
+// ====================================================
+function todayStr() {
+  return localDateStr(new Date());
+}
+
+function localDateStr(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function toLocalDTStr(d) {
+  // for datetime-local input value
+  const offset = d.getTimezoneOffset();
+  const local = new Date(d.getTime() - offset * 60000);
+  return local.toISOString().slice(0, 16);
+}
+
+function dateRange() {
+  const arr = [];
+  const now = new Date(); now.setHours(0, 0, 0, 0);
+  for (let i = -7; i <= 7; i++) {
+    const d = new Date(now); d.setDate(now.getDate() + i);
+    arr.push(d);
+  }
+  return arr;
+}
+
+function weekday(d) {
+  return ['日', '一', '二', '三', '四', '五', '六'][d.getDay()];
+}
+
+function isPast(ds) { return ds < todayStr(); }
+function isToday(ds) { return ds === todayStr(); }
+
+function fmtTime(iso) {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function fmtDateLabel(ds) {
+  const d = new Date(ds + 'T00:00:00');
+  const m = d.getMonth() + 1, day = d.getDate();
+  if (isToday(ds)) return `今日  ${m}月${day}日`;
+  return `${m}月${day}日  周${weekday(d)}`;
+}
+
+// ====================================================
+// LocalStorage
+// ====================================================
+function saveUser(u) { localStorage.setItem('yanyun_user', JSON.stringify(u)); }
+function loadUser() {
+  try { return JSON.parse(localStorage.getItem('yanyun_user') || 'null'); }
+  catch { return null; }
+}
+
+// ====================================================
+// API
+// ====================================================
+async function api(method, url, body) {
+  const r = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || '请求失败');
+  return data;
+}
+
+// ====================================================
+// Loading管理
+// ====================================================
+let globalLoadingEl = null;
+const regionLoadings = new Map();
+
+function showLoading(message = '加载中...') {
+  if (globalLoadingEl) return;
+  globalLoadingEl = document.createElement('div');
+  globalLoadingEl.className = 'loading-overlay';
+  globalLoadingEl.innerHTML = `
+    <div class="loading-spinner"></div>
+    <div class="loading-text">${message}</div>
+  `;
+  document.body.appendChild(globalLoadingEl);
+}
+
+function hideLoading() {
+  if (!globalLoadingEl) return;
+  globalLoadingEl.classList.add('hiding');
+  setTimeout(() => {
+    globalLoadingEl?.remove();
+    globalLoadingEl = null;
+  }, 200);
+}
+
+function showRegionLoading(elementId) {
+  const el = document.getElementById(elementId);
+  if (!el || regionLoadings.has(elementId)) return;
+  const loadingEl = document.createElement('div');
+  loadingEl.className = 'loading-region';
+  loadingEl.innerHTML = '<div class="loading-spinner"></div>';
+  el.style.position = 'relative';
+  el.appendChild(loadingEl);
+  regionLoadings.set(elementId, loadingEl);
+}
+
+function hideRegionLoading(elementId) {
+  const loadingEl = regionLoadings.get(elementId);
+  if (loadingEl) {
+    loadingEl.remove();
+    regionLoadings.delete(elementId);
+  }
+}
+
+function setButtonLoading(button, loading) {
+  if (!button) return;
+  if (loading) {
+    button.disabled = true;
+    button.classList.add('btn-loading');
+  } else {
+    button.disabled = false;
+    button.classList.remove('btn-loading');
+  }
+}
+
+async function apiWithLoading(method, url, body, options = {}) {
+  const { showGlobal, showButton, message } = options;
+  if (showGlobal) showLoading(message);
+  if (showButton) setButtonLoading(showButton, true);
+  try {
+    const result = await api(method, url, body);
+    return result;
+  } finally {
+    if (showGlobal) hideLoading();
+    if (showButton) setButtonLoading(showButton, false);
+  }
+}
+
+// ====================================================
+// WebSocket
+// ====================================================
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  try {
+    S.ws = new WebSocket(`${proto}//${location.host}`);
+    S.ws.onopen = () => { clearPoll(); };
+    S.ws.onmessage = e => onWSMsg(JSON.parse(e.data));
+    S.ws.onclose = S.ws.onerror = () => { S.ws = null; startPoll(); };
+  } catch { startPoll(); }
+}
+
+function startPoll() {
+  if (S.pollTimer) return;
+  S.pollTimer = setInterval(async () => {
+    try {
+      const [us, ts] = await Promise.all([api('GET', '/api/users'), api('GET', '/api/teams')]);
+      S.users = us; S.teams = ts; renderAll();
+    } catch { }
+  }, MOBILE_CONFIG.pollInterval);
+}
+function clearPoll() { if (S.pollTimer) { clearInterval(S.pollTimer); S.pollTimer = null; } }
+
+function onWSMsg(msg) {
+  switch (msg.type) {
+    case 'init':
+      S.users = msg.data.users; S.teams = msg.data.teams; renderAll();
+      if (msg.data.lottery) {
+        LOT.slots = msg.data.lottery.slots || [];
+        LOT.winners = msg.data.lottery.winners || [];
+        LOT.bannerClearedAt = msg.data.lottery.bannerClearedAt
+          ? new Date(msg.data.lottery.bannerClearedAt).getTime() : 0;
+        redrawWheel(); updateWinnerBanner();
+      }
+      break;
+    case 'user_joined':
+      if (!S.users.find(u => u.id === msg.data.id)) { S.users.push(msg.data); renderUserList(); }
+      break;
+    case 'user_updated': {
+      const ui = S.users.findIndex(u => u.id === msg.data.id);
+      if (ui !== -1) S.users[ui] = msg.data;
+      // 若是自己被其他标签页同步过来，也更新本地状态
+      if (S.user && S.user.id === msg.data.id) { S.user = msg.data; saveUser(msg.data); updateMyBadge(); }
+      renderUserList();
+      break;
+    }
+    case 'user_deleted': {
+      // 从用户列表中移除被删除的用户
+      S.users = S.users.filter(u => u.id !== msg.data.id);
+      renderUserList();
+      // 如果当前用户被删除，清除本地登录状态
+      if (S.user && S.user.id === msg.data.id) {
+        S.user = null;
+        localStorage.removeItem('yanyun_user');
+        updateMyBadge();
+        toast(`您已被管理员移除江湖`);
+      }
+      break;
+    }
+    case 'team_created':
+      if (!S.teams.find(t => t.id === msg.data.id)) { S.teams.push(msg.data); renderTeams(); }
+      break;
+    case 'team_updated': {
+      const i = S.teams.findIndex(t => t.id === msg.data.id);
+      if (i !== -1) S.teams[i] = msg.data; else S.teams.push(msg.data);
+      renderTeams(); break;
+    }
+    case 'team_deleted':
+      S.teams = S.teams.filter(t => t.id !== msg.data.id); renderTeams(); break;
+    case 'lottery_update':
+      LOT.slots = msg.data.slots || [];
+      redrawWheel(); break;
+    case 'lottery_slot_update':
+      if (LOT.slots[msg.data.slotIndex] !== undefined)
+        LOT.slots[msg.data.slotIndex].quantity = msg.data.quantity;
+      redrawWheel(); break;
+    case 'lottery_winner':
+      LOT.winners.push(msg.data);
+      // 自己正在转动时，延迟到动画结束（showSpinResult）再刷新，避免结果提前显示
+      if (!LOT.spinning) { updateWinnerBanner(); renderLotteryRecords(); }
+      break;
+    case 'lottery_banner_cleared': {
+      LOT.bannerClearedAt = new Date(msg.data.clearedAt).getTime();
+      const bt = document.getElementById('bannerTrack');
+      if (bt) { bt.style.animation = 'none'; bt.dataset.content = ''; }
+      document.getElementById('winnerBanner').style.display = 'none';
+      break;
+    }
+    case 'lottery_winners_cleared':
+      LOT.winners = [];
+      LOT.bannerClearedAt = msg.data && msg.data.bannerClearedAt
+        ? new Date(msg.data.bannerClearedAt).getTime() : Date.now();
+      {
+        const bt = document.getElementById('bannerTrack');
+        if (bt) { bt.style.animation = 'none'; bt.dataset.content = ''; }
+      }
+      document.getElementById('winnerBanner').style.display = 'none';
+      renderLotteryRecords(); break;
+  }
+}
+
+// ====================================================
+// Render
+// ====================================================
+function renderAll() { renderUserList(); renderDateRow(); renderTeams(); updateMyBadge(); checkPendingJoin(); renderLotteryRecords(); }
+
+function getUserAvatar(u) {
+  const url = u && u.avatarUrl && String(u.avatarUrl).trim() ? String(u.avatarUrl).trim() : '';
+  return url || 'img/default-avatar.jpg';
+}
+
+function getRankLabel(rank) {
+  const rankTitles = ['魁首', '亚元', '季元', '亚魁', '经魁', '六俊', '七杰', '八英', '九豪', '十贤'];
+  return rankTitles[rank - 1] || `第${rank}名`;
+}
+
+let renderUserListTimer = null;
+let lastUserListHash = '';
+
+function getUserListHash() {
+  return S.users.map(u => `${u.id}-${u.signInCount}-${u.avatarUrl}`).join('|');
+}
+
+function renderUserList(immediate = false) {
+  const currentHash = getUserListHash();
+  if (currentHash === lastUserListHash) {
+    return;
+  }
+  lastUserListHash = currentHash;
+
+  clearTimeout(renderUserListTimer);
+
+  if (immediate) {
+    _doRenderUserList();
+  } else {
+    renderUserListTimer = setTimeout(() => {
+      _doRenderUserList();
+    }, 100);
+  }
+}
+
+function _doRenderUserList() {
+  const el = document.getElementById('userList');
+  const sortedUsers = [...S.users].sort((a, b) => {
+    const signDiff = (b.signInCount || 0) - (a.signInCount || 0);
+    if (signDiff !== 0) return signDiff;
+    return String(a.gameName || '').localeCompare(String(b.gameName || ''), 'zh-CN');
+  });
+
+  document.getElementById('userCount').textContent = `共 ${sortedUsers.length} 位`;
+  el.innerHTML = sortedUsers.map((u, index) => {
+    const me = S.user && u.id === S.user.id;
+    const avatar = getUserAvatar(u);
+    const signInCount = u.signInCount || 0;
+    const rank = index + 1;
+    return `<div class="user-item${me ? ' me' : ''}" onclick="handleUserItemClick(event, '${u.id}')">
+      <div class="user-avatar-wrap">
+        <img class="user-avatar lazy-avatar"
+             data-src="${esc(avatar)}"
+             src="img/default-avatar.jpg"
+             alt=""
+             onerror="this.onerror=null;this.src='img/default-avatar.jpg'">
+      </div>
+      <div class="user-info">
+        <span class="user-name">${esc(u.gameName)}${me ? ' ◆' : ''}</span>
+        <span class="style-tag">${esc(u.mainStyle)}${u.subStyle ? ` · ${esc(u.subStyle)}` : ''}</span>
+      </div>
+      <div class="user-meta">
+        <span class="user-rank">${getRankLabel(rank)}</span>
+        <span class="user-sign-days">${signInCount}天</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  updateLazyLoading();
+}
+
+function forceRenderUserList() {
+  clearTimeout(renderUserListTimer);
+  lastUserListHash = '';
+  _doRenderUserList();
+}
+
+function handleUserItemClick(event, userId) {
+  const user = S.users.find(u => u.id === userId);
+  if (!user) return;
+
+  const me = S.user && user.id === S.user.id;
+  const actions = [];
+
+  if (me) {
+    actions.push({ label: '查看身份', fn: () => handleMyBadgeClick() });
+  }
+
+  if (amIAdmin() && !me) {
+    actions.push({ label: '请离百业', danger: true, fn: () => deleteUser(user.id, user.gameName) });
+  }
+
+  if (!actions.length) return;
+  showPopup(event, actions);
+}
+
+// 删除用户
+async function deleteUser(userId, gameName) {
+
+  const result = await Swal.fire({
+    title: '确认删除',
+    html: `确定要删除游侠 <strong>${gameName}</strong> 吗？<br><br>此操作将：<br>• 删除该用户创建的所有队伍<br>• 从其他队伍中移除该用户<br>• 删除该用户的所有邀请记录`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: '确定删除',
+    cancelButtonText: '取消',
+    customClass: { popup: 'swal-dark' },
+    confirmButtonColor: '#d33',
+  });
+
+  if (!result.isConfirmed) return;
+
+  // 显示 loading 状态
+  const loadingSwal = Swal.fire({
+    title: '删除中...',
+    html: '正在清理该用户的相关数据',
+    allowOutsideClick: false,
+    customClass: { popup: 'swal-dark' },
+    didOpen: () => {
+      Swal.showLoading();
+    }
+  });
+
+  try {
+    await api('DELETE', '/api/users/' + userId, { adminId: S.user.id });
+
+    loadingSwal.close();
+
+    await Swal.fire({
+      title: '删除成功',
+      text: `游侠 ${gameName} 已从江湖除名`,
+      icon: 'success',
+      customClass: { popup: 'swal-dark' },
+      timer: 1500,
+      showConfirmButton: false
+    });
+  } catch (e) {
+    loadingSwal.close();
+    Swal.fire({
+      title: '删除失败',
+      text: e.message || '操作失败，请重试',
+      icon: 'error',
+      customClass: { popup: 'swal-dark' }
+    });
+  }
+}
+
+function renderDateRow() {
+  const row = document.getElementById('dateRow');
+  row.innerHTML = '';
+  dateRange().forEach(d => {
+    const ds = localDateStr(d);
+    const el = document.createElement('div');
+    el.className = `date-btn${ds === S.date ? ' active' : ''}${isPast(ds) ? ' past' : ''}${isToday(ds) ? ' today' : ''}`;
+    el.innerHTML = `<span class="dd">${d.getDate()}</span><span class="dw">${isToday(ds) ? '今日' : '周' + weekday(d)}</span>`;
+    el.onclick = () => selectDate(ds);
+    row.appendChild(el);
+    if (ds === S.date) setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' }), 50);
+  });
+}
+
+function renderTeams() {
+  const wrap = document.getElementById('teamsWrap');
+  const list = S.teams
+    .filter(t => t.date === S.date)
+    .sort((a, b) => new Date(a.time) - new Date(b.time));
+
+  wrap.innerHTML = `<div class="date-label">${fmtDateLabel(S.date)}</div>`;
+
+  if (!list.length) {
+    const tip = isPast(S.date) ? '往昔已逝，此日无队可寻' : '此日尚无队伍\n江湖路宽，可率先聚义';
+    wrap.innerHTML += `<div class="empty-tip">${tip}</div>`;
+    return;
+  }
+  list.forEach(t => wrap.appendChild(buildCard(t)));
+}
+
+function buildCard(team) {
+  const isMine = S.user && team.members.some(m => m.userId === S.user.id);
+  const isFull = team.members.length >= team.maxSize;
+  const isLeader = S.user && team.leaderId === S.user.id;
+
+  const card = document.createElement('div');
+  card.className = `team-card${isMine ? ' mine' : ''}${isFull ? ' full' : ''}`;
+
+  // 成员槽
+  let slots = '';
+  for (let i = 0; i < team.maxSize; i++) {
+    const m = team.members[i];
+    if (m) {
+      const ldr = m.userId === team.leaderId;
+      slots += `<div class="slot${ldr ? ' leader' : ''}" data-uid="${m.userId}">
+    <div class="sn">${esc(m.gameName)}</div>
+    <div class="sm">${esc(m.mainStyle)}</div>
+    ${m.subStyle ? `<div class="ss">${esc(m.subStyle)}</div>` : ''}
+  </div>`;
+    } else {
+      slots += `<div class="slot empty">虚位</div>`;
+    }
+  }
+
+  card.innerHTML = `
+<div class="team-top">
+  <span class="tag-purpose">${esc(team.purpose)}</span>
+  <span class="tag-type">${esc(team.type)}</span>
+  <span class="tag-time">⏰ ${fmtTime(team.time)}</span>
+</div>
+<div class="members-row">${slots}</div>
+<div class="card-foot">
+  <span class="count-tag${isFull ? ' full-tag' : ''}">${team.members.length}/${team.maxSize} 人${isFull ? ' · 已满员' : ''}</span>
+</div>`;
+
+  card.addEventListener('click', e => {
+    // 队长点成员 → 逐客令
+    const slotEl = e.target.closest('.slot:not(.empty)');
+    if (slotEl && isLeader) {
+      const uid = slotEl.dataset.uid;
+      if (uid !== S.user.id) { showKickPopup(e, team, uid); return; }
+    }
+    handleCardClick(e, team);
+  });
+
+  return card;
+}
+
+function updateMyBadge() {
+  const DEFAULT_AVATAR = 'img/default-avatar.jpg';
+  const nameEl = document.getElementById('myName');
+  const avatarEl = document.getElementById('myAvatar');
+
+  // 头像加载失败时回退到默认头像，且避免显示 alt 文本
+  if (avatarEl) {
+    avatarEl.alt = '';
+    avatarEl.onerror = () => {
+      avatarEl.onerror = null;
+      avatarEl.src = DEFAULT_AVATAR;
+    };
+  }
+
+  if (S.user) {
+    if (nameEl) nameEl.textContent = S.user.gameName;
+    if (avatarEl) {
+      const url = (S.user.avatarUrl && String(S.user.avatarUrl).trim()) ? String(S.user.avatarUrl).trim() : '';
+      avatarEl.src = url || DEFAULT_AVATAR;
+    }
+  } else {
+    if (nameEl) nameEl.textContent = '未登录';
+    if (avatarEl) avatarEl.src = DEFAULT_AVATAR;
+  }
+
+  // 仅管理员显示清空轮播按钮
+  const clearBtn = document.getElementById('clearBannerBtn');
+  if (clearBtn) clearBtn.style.display = (amIAdmin()) ? '' : 'none';
+}
+
+// ====================================================
+// 交互
+// ====================================================
+function selectDate(ds, dir) {
+  // dir: 'left'(下一天) | 'right'(上一天) | undefined(点击)
+  S.date = ds;
+  renderDateRow();
+  renderTeams();
+  if (dir) {
+    const wrap = document.getElementById('teamsWrap');
+    const cls = dir === 'left' ? 'slide-left' : 'slide-right';
+    wrap.classList.remove('slide-left', 'slide-right');
+    // 强制重排后再加类，确保动画重新触发
+    void wrap.offsetWidth;
+    wrap.classList.add(cls);
+    wrap.addEventListener('animationend', () => wrap.classList.remove(cls), { once: true });
+  }
+}
+
+function toggleSidebar() {
+  const sb = document.getElementById('sidebar');
+  const open = sb.classList.toggle('open');
+  if (open) {
+    const mask = document.createElement('div');
+    mask.className = 'sidebar-mask'; mask.id = 'sbMask';
+    mask.onclick = () => { sb.classList.remove('open'); mask.remove(); };
+    document.body.appendChild(mask);
+  } else {
+    document.getElementById('sbMask')?.remove();
+  }
+}
+
+function handleMyBadgeClick() {
+  if (!S.user) { showIdentityModal(); return; }
+  const badge = document.getElementById('myBadge');
+  const rect = badge.getBoundingClientRect();
+  const fakeE = { clientX: rect.right, clientY: rect.bottom, currentTarget: badge };
+  const contributionPoints = S.user.contributionPoints || 0;
+  showPopup(fakeE, [
+    { label: `贡献值：${contributionPoints}`, fn: null, isInfo: true },
+    { label: '个人中心', fn: () => window.location.href = '/profile.html' },
+    { label: '修改信息', fn: showEditModal },
+    { label: '令牌额度', fn: showQuotaModal },
+    { label: '暂别江湖', danger: true, fn: doLogout },
+  ]);
+}
+
+async function showQuotaModal() {
+  const modal = openModal('令牌额度', `<div class="quota-loading">查询中…</div>`);
+  try {
+    const res = await api('GET', `/api/mp/quota/${S.user.id}`);
+    const q = res.quotas || { invite: 0, full: 0, remind: 0 };
+    modal.innerHTML = `
+  <div class="quota-info-list">
+    <div class="quota-info-row">
+      <span class="quota-info-label">⚔ 邀约令</span>
+      <span class="quota-info-val ${q.invite === 0 ? 'empty' : ''}">${q.invite}</span>
+    </div>
+    <div class="quota-info-row">
+      <span class="quota-info-label">⚔ 满员令</span>
+      <span class="quota-info-val ${q.full === 0 ? 'empty' : ''}">${q.full}</span>
+    </div>
+    <div class="quota-info-row">
+      <span class="quota-info-label">⚔ 开本令</span>
+      <span class="quota-info-val ${q.remind === 0 ? 'empty' : ''}">${q.remind}</span>
+    </div>
+  </div>
+  <p class="quota-info-hint">额度不足时，请前往小程序「令牌殿」补充。</p>
+  <div class="fbtns"><button class="btn btn-ghost" onclick="closeModal()">知晓</button></div>
+`;
+  } catch (e) {
+    modal.innerHTML = `
+  <p style="color:var(--red-light);text-align:center;margin-bottom:16px">查询失败：${e.message}</p>
+  <div class="fbtns"><button class="btn btn-ghost" onclick="closeModal()">关闭</button></div>
+`;
+  }
+}
+
+function doLogout() {
+  S.user = null;
+  localStorage.removeItem('yanyun_user');
+  updateMyBadge();
+  renderUserList();
+  toast('已离开江湖，后会有期');
+}
+
+// 点击队伍卡片
+function handleCardClick(e, team) {
+  // 未登录：任何操作都先拉起登录
+  if (!S.user) { S.pendingAction = () => handleCardClick(e, team); showIdentityModal(); return; }
+  // 过期日期普通用户无法操作；管理员可绕过，以便解散残留队伍
+  if (isPast(S.date) && !amIAdmin()) {
+    toast('往昔队伍不可相邀，请择他日再聚');
+    return;
+  }
+
+  // 始终从 S.teams 取最新状态，避免闭包旧数据导致误判
+  const fresh = S.teams.find(t => t.id === team.id) || team;
+  const isMine = fresh.members.some(m => m.userId === S.user.id);
+  const isFull = fresh.members.length >= fresh.maxSize;
+  const isLeader = fresh.leaderId === S.user.id;
+  const isAdmin = amIAdmin();
+
+  const teamTimePassed = new Date(fresh.time) <= new Date();
+  const actions = [];
+
+  if (isMine) {
+    if (isLeader) {
+      actions.push({ label: '修改时间', fn: () => showEditTimeModal(fresh) });
+      actions.push({ label: '邀约江湖', fn: () => shareTeamInvite(fresh) });
+    }
+    actions.push({ label: '辞队而去', danger: true, fn: () => doLeave(fresh) });
+  } else {
+    // 非成员普通用户：满员或已过开本时间均无法加入
+    if (isFull) { toast('队伍已满员，暂难容纳更多游侠'); return; }
+    if (teamTimePassed) { toast('此队已过开本时间，无法加入'); return; }
+    // 管理员和普通用户都可以加入未满员的未来队伍
+    actions.push({ label: '入队相邀', fn: () => doJoin(fresh) });
+  }
+
+  // 管理员始终可以修改时间（无论是否在队伍中）
+  if (isAdmin) {
+    actions.push({ label: '修改时间', fn: () => showEditTimeModal(fresh) });
+    actions.push({ label: '散伙议事', danger: true, fn: () => doDissolve(fresh) });
+  }
+
+  if (!actions.length) return;
+  showPopup(e, actions);
+}
+
+function showKickPopup(e, team, uid) {
+  showPopup(e, [{ label: '逐客令', danger: true, fn: () => doKick(team, uid) }]);
+}
+
+// ====================================================
+// 队伍操作（API 完成后立即乐观更新本地状态，不等 WS）
+// ====================================================
+
+// 将服务器返回的最新队伍数据同步到 S.teams 并重渲染
+function applyTeamResult(result, teamId) {
+  if (result && result.dissolved) {
+    S.teams = S.teams.filter(t => t.id !== teamId);
+  } else if (result && result.id) {
+    const i = S.teams.findIndex(t => t.id === result.id);
+    if (i !== -1) S.teams[i] = result; else S.teams.push(result);
+  }
+  renderTeams();
+}
+
+// ---------- 邀约江湖：拉取可邀请用户并发出通知 ----------
+async function shareTeamInvite(team) {
+  const modal = openModal('邀约江湖', `
+<div class="invite-loading">正在召唤江湖名册…</div>
+  `);
+
+  let list;
+  try {
+    list = await api('GET', '/api/mp/users/invitable');
+  } catch (e) {
+    modal.innerHTML = `<div class="invite-loading" style="color:var(--err)">名册获取失败：${e.message}</div>
+  <div class="fbtns"><button class="btn btn-ghost" onclick="closeModal()">拂袖而去</button></div>`;
+    return;
+  }
+
+  // 过滤掉已在队伍中的成员
+  const inTeam = new Set(team.members.map(m => m.userId));
+  list = list.filter(u => !inTeam.has(u.id));
+
+  if (list.length === 0) {
+    modal.innerHTML = `
+  <p class="invite-empty">暂无可邀请的豪侠</p>
+  <p class="invite-hint">可邀请的豪侠需在小程序「令牌殿」中领取邀约令，且不得已在队伍中。</p>
+  <div style="margin-top:20px;padding-top:15px;border-top:1px solid #eee">
+    <button class="btn-share-wechat" onclick="openWechatShare('${team.id}')">
+      <span style="font-size:18px">📱</span> 分享到微信
+    </button>
+  </div>
+  <div class="fbtns" style="margin-top:16px"><button class="btn btn-ghost" onclick="closeModal()">完成</button></div>
+`;
+    return;
+  }
+
+  modal.innerHTML = `
+<p class="invite-hint">以下豪侠持有邀约令，点击「邀请」可发送小程序通知</p>
+<ul class="invite-list" id="invite-list">
+  ${list.map(u => `
+    <li class="invite-item" data-uid="${u.id}">
+      <span class="invite-name">${u.gameName}</span>
+      <span class="invite-style">${u.mainStyle}${u.subStyle ? '·' + u.subStyle : ''}</span>
+      <span class="invite-quota">×${u.inviteQuota}</span>
+      <button class="btn btn-primary invite-btn" onclick="doInviteUser('${team.id}','${u.id}',this)">邀请</button>
+    </li>
+  `).join('')}
+</ul>
+<div style="margin-top:20px;padding-top:15px;border-top:1px solid #eee">
+  <button class="btn-share-wechat" onclick="openWechatShare('${team.id}')">
+    <span style="font-size:18px">📱</span> 分享到微信
+  </button>
+</div>
+<div class="fbtns" style="margin-top:16px">
+  <button class="btn btn-ghost" onclick="closeModal()">完成</button>
+</div>
+  `;
+}
+
+function openWechatShare(teamId) {
+  const currentUser = loadUser();
+  if (!currentUser) {
+    return toast('请先登录');
+  }
+  const shareUrl = `${location.origin}/share.html?join=${teamId}&from=${currentUser.id}`;
+  window.open(shareUrl, '_blank');
+}
+
+async function doInviteUser(teamId, targetId, btn) {
+  btn.disabled = true;
+  btn.textContent = '发令中…';
+  try {
+    await api('POST', '/api/mp/invite', {
+      fromUserId: S.user.id, targetUserId: targetId, teamId
+    });
+    btn.textContent = '已发出';
+    btn.classList.replace('btn-primary', 'btn-ghost');
+    // 更新显示的余量
+    const item = btn.closest('.invite-item');
+    const quotaEl = item.querySelector('.invite-quota');
+    const cur = parseInt(quotaEl.textContent.replace('×', '')) - 1;
+    quotaEl.textContent = `×${cur}`;
+  } catch (e) {
+    toast(e.message || '邀请失败');
+    btn.disabled = false;
+    btn.textContent = '邀请';
+  }
+}
+
+function fallbackCopy(text) {
+  const el = document.createElement('textarea');
+  el.value = text;
+  el.style.cssText = 'position:fixed;opacity:0;top:0;left:0';
+  document.body.appendChild(el);
+  el.select();
+  try {
+    document.execCommand('copy');
+    toast('邀约令已复制，传于江湖即可');
+  } catch (e) {
+    toast('复制失败，请手动复制链接');
+  }
+  el.remove();
+}
+
+// ---------- 分享链接自动入队 ----------
+function checkPendingJoin() {
+  if (!S.pendingJoin || !S.user) return;
+  if (!S.teams.length) return; // 队伍数据未就绪，等下次 renderAll 触发
+
+  const teamId = S.pendingJoin;
+  S.pendingJoin = null;
+
+  const team = S.teams.find(t => t.id === teamId);
+  if (!team) { toast('此队已散，缘分已尽'); return; }
+  if (team.members.some(m => m.userId === S.user.id)) return; // 已在队中，静默
+  if (team.members.length >= team.maxSize) { toast('此队已满员，有缘再聚'); return; }
+
+  const leader = team.members.find(m => m.userId === team.leaderId);
+  openModal('应约入队', `
+<div style="text-align:center;padding:8px 0 16px">
+  <div style="font-size:16px;color:var(--gold-light);letter-spacing:2px;margin-bottom:12px">江湖邀约</div>
+  <div style="font-size:13px;color:var(--text-dim);line-height:2">
+    队长：${esc(leader ? leader.gameName : '未知')}<br>
+    人数：${team.members.length} / ${team.maxSize}<br>
+    日期：${team.date}
+  </div>
+</div>
+<div class="fbtns">
+  <button class="btn btn-ghost" onclick="closeModal()">婉拒</button>
+  <button class="btn btn-primary" onclick="closeModal();doJoin(S.teams.find(t=>t.id==='${teamId}'))">应约入队</button>
+</div>
+  `);
+}
+
+async function doJoin(team) {
+  showLoading('入队中...');
+  try {
+    const res = await api('POST', `/api/teams/${team.id}/join`, { userId: S.user.id });
+    applyTeamResult(res, team.id);
+    toast('已入队，江湖再聚！');
+  } catch (e) { toast(e.message); }
+  finally { hideLoading(); }
+}
+
+async function doLeave(team) {
+  showLoading('离队中...');
+  try {
+    const res = await api('POST', `/api/teams/${team.id}/leave`, { userId: S.user.id });
+    applyTeamResult(res, team.id);
+    toast('已辞队而去');
+  } catch (e) { toast(e.message); }
+  finally { hideLoading(); }
+}
+
+async function doKick(team, uid) {
+  showLoading('处理中...');
+  try {
+    const res = await api('POST', `/api/teams/${team.id}/kick`, { leaderId: S.user.id, targetUserId: uid });
+    applyTeamResult(res, team.id);
+    toast('已发出逐客令');
+  } catch (e) { toast(e.message); }
+  finally { hideLoading(); }
+}
+
+async function doDissolve(team) {
+  confirm2('确定要散伙议事，解散此队伍吗？', async () => {
+    showLoading('解散中...');
+    try {
+      await api('POST', `/api/teams/${team.id}/dissolve`, { adminId: S.user.id });
+      applyTeamResult({ dissolved: true }, team.id);
+      toast('队伍已解散');
+    } catch (e) { toast(e.message); }
+    finally { hideLoading(); }
+  });
+}
+
+// ====================================================
+// 创建队伍
+// ====================================================
+function handleCreateTeam() {
+  if (!S.user) { S.pendingAction = handleCreateTeam; showIdentityModal(); return; }
+  showCreateModal();
+}
+
+function showCreateModal() {
+  const now = new Date();
+  const min = toLocalDTStr(new Date(now.getTime() + 60000));
+  const max = toLocalDTStr(new Date(now.getTime() + 7 * 24 * 3600 * 1000));
+  let defDate = S.date;
+  if (isPast(defDate)) defDate = todayStr();
+  const def = defDate + 'T20:00';
+
+  const m = openModal('聚义成队', `
+<div class="fg">
+  <label class="fl">预约人数 <span class="req">*</span></label>
+  <select class="fs" id="c-type">
+    <option value="五人本">五人本（5人）</option>
+    <option value="十人本">十人本（10人）</option>
+  </select>
+</div>
+<div class="fg">
+  <label class="fl">打本目的 <span class="req">*</span></label>
+  <select class="fs" id="c-purpose">
+    <option value="日常">日常</option>
+    <option value="天赋">天赋</option>
+  </select>
+</div>
+<div class="fg">
+  <label class="fl">打本时间 <span class="req">*</span></label>
+  <input type="datetime-local" class="fi" id="c-time" value="${def}" min="${min}" max="${max}">
+  <div class="fh">仅可选择未来 7 天</div>
+</div>
+<div class="global-err" id="c-err"></div>
+<div class="fbtns">
+  <button class="btn btn-ghost" onclick="closeModal()">拂袖而去</button>
+  <button class="btn btn-primary" onclick="submitCreate()">聚义成队</button>
+</div>
+  `);
+}
+
+async function submitCreate() {
+  const type = document.getElementById('c-type').value;
+  const purpose = document.getElementById('c-purpose').value;
+  const timeVal = document.getElementById('c-time').value;
+  const errEl = document.getElementById('c-err');
+
+  if (!timeVal) return showGErr(errEl, '请选择打本时间');
+  const dt = new Date(timeVal);
+  if (dt <= new Date()) return showGErr(errEl, '往昔不可追，请择他日');
+
+  const localDate = timeVal.split('T')[0];
+
+  const existingUnfull = S.teams.filter(t =>
+    t.type === type && t.members.length < t.maxSize && !isPast(t.date)
+  );
+
+  const doCreate = async () => {
+    closeModal();
+    showLoading('创建队伍中...');
+    try {
+      await api('POST', '/api/teams', { type, purpose, time: dt.toISOString(), date: localDate, userId: S.user.id });
+      toast('队伍已建，广邀江湖同道！');
+    } catch (e) { toast(e.message); }
+    finally { hideLoading(); }
+  };
+
+  if (existingUnfull.length > 0) {
+    confirm2('当前已有同类型未满队伍，确定要另起炉灶吗？', doCreate);
+  } else {
+    await doCreate();
+  }
+}
+
+// ====================================================
+// 信息编辑
+// ====================================================
+function showEditModal() {
+  openModal('修改信息', `
+<div class="fg">
+  <label class="fl">游戏名 <span class="req">*</span></label>
+  <input class="fi" id="e-name" value="${esc(S.user.gameName)}" maxlength="20">
+</div>
+<div class="fg">
+  <label class="fl">百业名</label>
+  <input class="fi" value="${esc(S.user.guildName)}" disabled style="opacity:.5;cursor:not-allowed;">
+  <div class="fh">百业名不可修改</div>
+</div>
+<div class="fg">
+  <label class="fl">主流派 <span class="req">*</span></label>
+  <input class="fi" id="e-main" value="${esc(S.user.mainStyle)}" maxlength="2">
+</div>
+<div class="fg">
+  <label class="fl">副流派</label>
+  <input class="fi" id="e-sub" value="${esc(S.user.subStyle || '')}" placeholder="选填，最多2个汉字" maxlength="2">
+</div>
+<div style="border-top:1px solid var(--border);margin:14px 0 12px;"></div>
+<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;letter-spacing:.5px;">
+  ▸ 修改密码（不改则留空）
+</div>
+<div class="fg">
+  <label class="fl">当前密码</label>
+  <input class="fi" id="e-oldpwd" type="password" placeholder="若要改密码请填写当前密码" autocomplete="off">
+</div>
+<div class="fg">
+  <label class="fl">新密码</label>
+  <input class="fi" id="e-newpwd" type="password" placeholder="至少6位" autocomplete="new-password">
+</div>
+<div class="fg">
+  <label class="fl">确认新密码</label>
+  <input class="fi" id="e-newpwd2" type="password" placeholder="再次输入新密码" autocomplete="new-password">
+</div>
+<div class="global-err" id="e-err"></div>
+<div class="fbtns">
+  <button class="btn btn-ghost" onclick="closeModal()">拂袖而去</button>
+  <button class="btn btn-primary" onclick="submitEdit()">落笔成册</button>
+</div>
+  `);
+}
+
+async function submitEdit() {
+  const name = document.getElementById('e-name').value.trim();
+  const main = document.getElementById('e-main').value.trim();
+  const sub = document.getElementById('e-sub').value.trim();
+  const oldPwd = document.getElementById('e-oldpwd').value;
+  const newPwd = document.getElementById('e-newpwd').value;
+  const newPwd2 = document.getElementById('e-newpwd2').value;
+  const errEl = document.getElementById('e-err');
+
+  if (!name) return showGErr(errEl, '游戏名不可为空');
+  if (!main) return showGErr(errEl, '主流派不可为空');
+  if (!/^[\u4e00-\u9fa5]{1,2}$/.test(main)) return showGErr(errEl, '主流派仅允许最多2个中文字符');
+  if (sub && !/^[\u4e00-\u9fa5]{1,2}$/.test(sub)) return showGErr(errEl, '副流派仅允许最多2个中文字符');
+
+  if (newPwd) {
+    if (!oldPwd) return showGErr(errEl, '请输入当前密码');
+    if (newPwd.length < 6) return showGErr(errEl, '新密码不可少于6位');
+    if (newPwd !== newPwd2) return showGErr(errEl, '两次密码输入不一致');
+  }
+
+  const body = { gameName: name, mainStyle: main, subStyle: sub };
+  if (newPwd) { body.oldPassword = oldPwd; body.newPassword = newPwd; }
+
+  try {
+    const updated = await api('PUT', `/api/users/${S.user.id}`, body);
+    S.user = updated;
+    saveUser(updated);
+    closeModal();
+    updateMyBadge();
+    toast(newPwd ? '信息与密码已更新！' : '信息已更新，江湖重塑！');
+  } catch (e) { showGErr(errEl, e.message); }
+}
+
+// ====================================================
+// 身份验证（登录 / 注册双 Tab）
+// ====================================================
+function showIdentityModal(defaultTab) {
+  defaultTab = defaultTab || 'login';
+  // 登录/注册弹窗不允许点击遮罩关闭，防止误操作导致输入内容丢失
+  openModal('踏入江湖', `
+  <div class="auth-tabs">
+  <button class="auth-tab${defaultTab === 'login' ? ' active' : ''}" id="tab-login" onclick="switchAuthTab('login')">登录</button>
+  <button class="auth-tab${defaultTab === 'register' ? ' active' : ''}" id="tab-register" onclick="switchAuthTab('register')">注册</button>
+</div>
+
+<!-- 登录面板 -->
+<div class="auth-panel${defaultTab === 'login' ? ' active' : ''}" id="panel-login">
+  <div class="fg">
+    <label class="fl">游戏名 <span class="req">*</span></label>
+    <input class="fi" id="l-name" placeholder="请输入游戏名" maxlength="20">
+  </div>
+  <div class="fg">
+    <label class="fl">密码 <span class="req">*</span></label>
+    <input class="fi" id="l-pwd" type="password" placeholder="请输入密码">
+  </div>
+  <div class="global-err" id="l-err"></div>
+  <div class="fbtns">
+    <button class="btn btn-ghost" onclick="closeModal()">拂袖而去</button>
+    <button class="btn btn-primary" onclick="submitLogin()">踏入江湖</button>
+  </div>
+</div>
+
+<!-- 注册面板 -->
+<div class="auth-panel${defaultTab === 'register' ? ' active' : ''}" id="panel-register">
+  <div class="fg">
+    <label class="fl">游戏名 <span class="req">*</span></label>
+    <input class="fi" id="r-name" placeholder="请输入游戏名" maxlength="20">
+  </div>
+  <div class="fg">
+    <label class="fl">百业名 <span class="req">*</span></label>
+    <input class="fi" id="r-guild" placeholder="仅限「百舸争流」成员">
+    <div class="fh">非百舸争流成员无法使用此功能</div>
+  </div>
+  <div class="fg">
+    <label class="fl">主流派 <span class="req">*</span></label>
+    <input class="fi" id="r-main" placeholder="最多2个汉字" maxlength="2">
+  </div>
+  <div class="fg">
+    <label class="fl">副流派</label>
+    <input class="fi" id="r-sub" placeholder="选填，最多2个汉字" maxlength="2">
+  </div>
+  <div class="fg">
+    <label class="fl">密码 <span class="req">*</span></label>
+    <input class="fi" id="r-pwd" type="password" placeholder="至少6位">
+  </div>
+  <div class="fg">
+    <label class="fl">确认密码 <span class="req">*</span></label>
+    <input class="fi" id="r-pwd2" type="password" placeholder="再次输入密码">
+  </div>
+  <div class="global-err" id="r-err"></div>
+  <div class="fbtns">
+    <button class="btn btn-ghost" onclick="closeModal()">拂袖而去</button>
+    <button class="btn btn-primary" onclick="submitRegister()">投名江湖</button>
+  </div>
+  </div>
+  `, false);
+}
+
+function switchAuthTab(tab) {
+  document.getElementById('tab-login').classList.toggle('active', tab === 'login');
+  document.getElementById('tab-register').classList.toggle('active', tab === 'register');
+  document.getElementById('panel-login').classList.toggle('active', tab === 'login');
+  document.getElementById('panel-register').classList.toggle('active', tab === 'register');
+}
+
+async function submitLogin() {
+  const name = document.getElementById('l-name').value.trim();
+  const pwd = document.getElementById('l-pwd').value;
+  const errEl = document.getElementById('l-err');
+  const btn = document.getElementById('l-submit');
+
+  if (!name) return showGErr(errEl, '游戏名不可为空');
+  if (!pwd) return showGErr(errEl, '密码不可为空');
+
+  setButtonLoading(btn, true);
+  try {
+    const user = await api('POST', '/api/auth/login', { gameName: name, password: pwd });
+    onLoginSuccess(user);
+  } catch (e) {
+    showGErr(errEl, e.message);
+  } finally {
+    setButtonLoading(btn, false);
+  }
+}
+
+async function submitRegister() {
+  const name = document.getElementById('r-name').value.trim();
+  const guild = document.getElementById('r-guild').value.trim();
+  const main = document.getElementById('r-main').value.trim();
+  const sub = document.getElementById('r-sub').value.trim();
+  const pwd = document.getElementById('r-pwd').value;
+  const pwd2 = document.getElementById('r-pwd2').value;
+  const errEl = document.getElementById('r-err');
+  const btn = document.getElementById('r-submit');
+
+  if (!name) return showGErr(errEl, '游戏名不可为空');
+  if (!guild) return showGErr(errEl, '百业名不可为空');
+  if (guild !== '百舸争流') return showGErr(errEl, '非本百业游侠，暂无法使用此功能');
+  if (!main) return showGErr(errEl, '主流派不可为空');
+  if (!/^[\u4e00-\u9fa5]{1,2}$/.test(main)) return showGErr(errEl, '主流派仅允许最多2个中文字符');
+  if (sub && !/^[\u4e00-\u9fa5]{1,2}$/.test(sub)) return showGErr(errEl, '副流派仅允许最多2个中文字符');
+  if (!pwd || pwd.length < 6) return showGErr(errEl, '密码不可少于6位');
+  if (pwd !== pwd2) return showGErr(errEl, '两次密码输入不一致');
+
+  setButtonLoading(btn, true);
+  try {
+    const user = await api('POST', '/api/users', { gameName: name, guildName: guild, mainStyle: main, subStyle: sub, password: pwd });
+    onLoginSuccess(user);
+  } catch (e) {
+    showGErr(errEl, e.message);
+  } finally {
+    setButtonLoading(btn, false);
+  }
+}
+
+function onLoginSuccess(user) {
+  S.user = user;
+  saveUser(user);
+  closeModal();
+  updateMyBadge();
+  // 刷新用户列表以更新管理员权限（显示删除按钮等）
+  renderUserList();
+  toast(`欢迎，${user.gameName}！江湖在望`);
+  if (S.pendingAction) {
+    const fn = S.pendingAction; S.pendingAction = null;
+    fn();
+  }
+  // 登录后检查是否有分享链接待处理（同步执行，优先处理）
+  checkPendingJoin();
+  // 并行启动：签到初始化（本地数据）、未读消息检查、最新告示弹窗
+  cachedNotices = null; // 清除旧缓存，确保本次登录获取最新数据
+  initSignInFromUserData();
+  Promise.all([
+    checkUnreadMessages(),
+    showLatestUnreadNotice()
+  ]);
+}
+
+// 告示缓存（登录后由 checkUnreadMessages 填充，showLatestUnreadNotice 复用）
+let cachedNotices = null;
+
+// 检查未读消息并显示角标（方案3：并行请求 + 缓存 notices）
+async function checkUnreadMessages() {
+  if (!S.user) return;
+  try {
+    const isAdmin = S.user.isAdmin;
+
+    // 并行发起 notices 请求（管理员同时发起 suggestions 请求）
+    const noticesPromise = api('GET', '/api/notices?userId=' + S.user.id);
+    const suggestionsPromise = isAdmin
+      ? api('GET', '/api/suggestions?adminId=' + S.user.id)
+      : Promise.resolve(null);
+
+    const [notices, suggestions] = await Promise.all([noticesPromise, suggestionsPromise]);
+
+    // 缓存 notices 供 showLatestUnreadNotice 复用
+    cachedNotices = notices;
+
+    // 检查是否有未读告示
+    if (notices && notices.length > 0) {
+      msgUnreadState.hasUnreadNotice = notices.some(n => !n.isRead);
+    } else {
+      msgUnreadState.hasUnreadNotice = false;
+    }
+
+    // 管理员检查建议箱
+    if (isAdmin && suggestions) {
+      msgUnreadState.hasUnreadSuggestion = suggestions.length > 0 && suggestions.some(s => !s.isRead);
+    }
+
+    updateMsgBadge();
+  } catch (e) {
+    console.error('检查未读消息失败:', e);
+  }
+}
+
+// 登录后弹窗展示最新未读告示（方案3：优先复用 cachedNotices，避免重复请求）
+async function showLatestUnreadNotice() {
+  if (!S.user) return;
+  // 管理员的建议信不需要走这个逻辑
+  if (S.user.isAdmin) return;
+
+  try {
+    // 优先使用缓存，缓存未命中才请求
+    const notices = cachedNotices !== null
+      ? cachedNotices
+      : await api('GET', '/api/notices?userId=' + S.user.id);
+
+    // 找出最新的未读告示
+    const unreadNotices = notices ? notices.filter(n => !n.isRead) : [];
+    if (unreadNotices.length === 0) return;
+
+    // 按创建时间排序，取最新的
+    unreadNotices.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const latestNotice = unreadNotices[0];
+
+    // 弹窗展示最新告示（与点击列表内告示的弹窗一致）
+    Swal.fire({
+      title: '最新告示',
+      html: `<div style="text-align:left;padding:10px 0;white-space:pre-wrap;">${esc(latestNotice.content)}</div>`,
+      confirmButtonText: '我已知晓',
+      customClass: { popup: 'swal-dark' },
+      allowOutsideClick: false,
+    }).then(async () => {
+      // 点击"我已知晓"后，将该告示置为已读
+      try {
+        const noticeId = latestNotice._id || latestNotice.id;
+        await api('POST', '/api/notices/' + noticeId + '/read', { userId: S.user.id });
+        // 更新本地状态，清除缓存确保后续读取最新数据
+        cachedNotices = null;
+        msgUnreadState.noticeViewed = true;
+        msgUnreadState.hasUnreadNotice = false;
+        updateMsgBadge();
+        // 刷新告示列表以更新红点状态
+        loadNotices();
+      } catch (e) {
+        console.error('标记已读失败:', e);
+      }
+    });
+  } catch (e) {
+    console.error('获取最新告示失败:', e);
+  }
+}
+
+// ====================================================
+// 队长修改打本时间
+// ====================================================
+function showEditTimeModal(team) {
+  const now = new Date();
+  const min = toLocalDTStr(new Date(now.getTime() + 60000));
+  const max = toLocalDTStr(new Date(now.getTime() + 7 * 24 * 3600 * 1000));
+  const cur = toLocalDTStr(new Date(team.time));
+
+  openModal('修改开本时间', `
+<div class="fg">
+  <label class="fl">打本时间 <span class="req">*</span></label>
+  <input type="datetime-local" class="fi" id="et-time" value="${cur}" min="${min}" max="${max}">
+  <div class="fh">不可早于当前时间，仅可选择未来 7 天</div>
+</div>
+<div class="global-err" id="et-err"></div>
+<div class="fbtns">
+  <button class="btn btn-ghost" onclick="closeModal()">拂袖而去</button>
+  <button class="btn btn-primary" onclick="submitEditTime('${team.id}')">确认修改</button>
+</div>
+  `);
+}
+
+async function submitEditTime(teamId) {
+  const timeVal = document.getElementById('et-time').value;
+  const errEl = document.getElementById('et-err');
+  if (!timeVal) return showGErr(errEl, '请选择打本时间');
+  const dt = new Date(timeVal);
+  if (dt <= new Date()) return showGErr(errEl, '时间不可早于当前时刻');
+  const localDate = timeVal.split('T')[0];
+  try {
+    const res = await api('PUT', `/api/teams/${teamId}/time`, {
+      leaderId: S.user.id, time: dt.toISOString(), date: localDate
+    });
+    applyTeamResult(res, teamId);
+    closeModal();
+    toast('开本时间已更新');
+  } catch (e) { showGErr(errEl, e.message); }
+}
+
+// ====================================================
+// UI 组件
+// ====================================================
+let _modal = null;
+let _modalCloseOnOverlay = true; // 默认允许点击遮罩关闭
+
+function openModal(title, body, closeOnOverlay = true) {
+  closeModal();
+  _modalCloseOnOverlay = closeOnOverlay;
+  const ov = document.createElement('div');
+  ov.className = 'overlay'; ov.id = '_ov';
+  ov.innerHTML = `<div class="modal"><div class="modal-title">${title}</div>${body}</div>`;
+  if (closeOnOverlay) {
+    ov.addEventListener('click', e => { if (e.target === ov) closeModal(); });
+  }
+  document.body.appendChild(ov);
+  _modal = ov;
+  return ov.querySelector('.modal');
+}
+
+function closeModal() { _modal?.remove(); _modal = null; }
+
+let _popup = null;
+let _popupHandler = null; // 必须显式跟踪，closePopup 时一并移除，防止旧监听器关掉新 popup
+
+function showPopup(e, actions) {
+  closePopup();
+  const p = document.createElement('div');
+  p.className = 'popup';
+  actions.forEach(({ label, danger, fn, isInfo }) => {
+    const b = document.createElement('button');
+    b.className = `pop-btn${danger ? ' pop-danger' : ''}${isInfo ? ' pop-info' : ''}`;
+    b.textContent = label;
+    if (fn) {
+      b.onclick = ev => { ev.stopPropagation(); closePopup(); fn(); };
+    } else {
+      b.style.cursor = 'default';
+      b.style.opacity = '0.8';
+    }
+    p.appendChild(b);
+  });
+  document.body.appendChild(p);
+  _popup = p;
+
+  const x = e.clientX, y = e.clientY;
+  p.style.cssText = `top:${y}px;left:${x}px`;
+  requestAnimationFrame(() => {
+    const r = p.getBoundingClientRect();
+    if (r.right > innerWidth - 8) p.style.left = (x - r.width) + 'px';
+    if (r.bottom > innerHeight - 8) p.style.top = (y - r.height) + 'px';
+  });
+
+  // setTimeout 0 避免本次点击事件冒泡触发关闭；用具名函数以便精确 remove
+  _popupHandler = () => closePopup();
+  setTimeout(() => { if (_popup) document.addEventListener('click', _popupHandler); }, 0);
+}
+
+function closePopup() {
+  if (_popupHandler) {
+    document.removeEventListener('click', _popupHandler);
+    _popupHandler = null;
+  }
+  if (_popup) { _popup.remove(); _popup = null; }
+}
+
+function confirm2(msg, ok) {
+  const el = document.createElement('div');
+  el.className = 'confirm-wrap';
+  el.innerHTML = `<div class="confirm-box">
+<div class="confirm-msg">${msg}</div>
+<div class="fbtns">
+  <button class="btn btn-ghost" id="_cn">再想想</button>
+  <button class="btn btn-primary" id="_cy">确认</button>
+</div></div>`;
+  document.body.appendChild(el);
+  el.querySelector('#_cn').onclick = () => el.remove();
+  el.querySelector('#_cy').onclick = () => { el.remove(); ok(); };
+}
+
+let _toastT = null;
+function toast(msg) {
+  document.querySelector('.toast')?.remove();
+  clearTimeout(_toastT);
+  const t = document.createElement('div');
+  t.className = 'toast'; t.textContent = msg;
+  document.body.appendChild(t);
+  _toastT = setTimeout(() => t.remove(), 3000);
+}
+
+function showGErr(el, msg) { el.textContent = msg; el.style.display = 'block'; }
+
+function esc(s) {
+  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ====================================================
+// 初始化
+// ====================================================
+// 抽奖系统（方格轨道跑格模式）
+// ====================================================
+const LOT = {
+  slots: [],          // 16格数据
+  winners: [],        // 本周中奖记录
+  bannerClearedAt: 0, // 管理员清空轮播的时间戳（ms），用于过滤 banner 展示
+  currentPos: 0,      // 当前高亮格子索引
+  spinning: false,
+  animId: null,
+};
+
+// 16格在6×4网格中的位置（grid坐标1-indexed，顺时针绕一圈）
+const SLOT_POS = [
+  // 顶行 0-5（左→右）
+  { r: 1, c: 1 }, { r: 1, c: 2 }, { r: 1, c: 3 }, { r: 1, c: 4 }, { r: 1, c: 5 }, { r: 1, c: 6 },
+  // 右列 6-7（上→下，排除角）
+  { r: 2, c: 6 }, { r: 3, c: 6 },
+  // 底行 8-13（右→左）
+  { r: 4, c: 6 }, { r: 4, c: 5 }, { r: 4, c: 4 }, { r: 4, c: 3 }, { r: 4, c: 2 }, { r: 4, c: 1 },
+  // 左列 14-15（下→上，排除角）
+  { r: 3, c: 1 }, { r: 2, c: 1 },
+];
+
+// ---------- 初始化 ----------
+async function initLottery() {
+  try {
+    const data = await api('GET', '/api/lottery');
+    LOT.slots = data.slots || [];
+    LOT.winners = data.winners || [];
+    LOT.bannerClearedAt = data.bannerClearedAt ? new Date(data.bannerClearedAt).getTime() : 0;
+    updateWinnerBanner();
+  } catch (e) { /* WS init 补偿 */ }
+}
+
+// ---------- 浮标入口 ----------
+// 浮标状态：false=收起，true=展开
+let _lotteryEntryExpanded = false;
+
+function _collapseLotteryEntry() {
+  const el = document.getElementById('lotteryEntry');
+  clearTimeout(el._timer);
+  el.classList.remove('visible');
+  _lotteryEntryExpanded = false;
+}
+
+function showLotteryEntryBriefly() {
+  // 仅在收起状态下触发短暂展示（用于外部事件提示）
+  if (_lotteryEntryExpanded) return;
+  const el = document.getElementById('lotteryEntry');
+  _lotteryEntryExpanded = true;
+  el.classList.add('visible');
+  el._timer = setTimeout(_collapseLotteryEntry, 2500);
+}
+
+function handleLotteryEntryClick() {
+  const el = document.getElementById('lotteryEntry');
+  clearTimeout(el._timer);
+  if (!_lotteryEntryExpanded) {
+    // 收起状态 → 展开，3s 后自动收起
+    _lotteryEntryExpanded = true;
+    el.classList.add('visible');
+    el._timer = setTimeout(_collapseLotteryEntry, 3000);
+  } else {
+    // 已展开 → 打开抽奖弹窗并收起浮标
+    _collapseLotteryEntry();
+    openLottery();
+  }
+}
+
+// ---------- 弹窗开关 ----------
+function openLottery() {
+  document.getElementById('lotteryOverlay').style.display = 'flex';
+  document.getElementById('lotteryResult').style.display = 'none';
+  renderSlotRing();
+  renderLotteryRecords();
+  updateSpinButton();
+
+  // 管理员显示增加次数按钮
+  const addCountBtn = document.getElementById('addCountBtn');
+  if (addCountBtn) {
+    addCountBtn.style.display = amIAdmin() ? 'block' : 'none';
+  }
+}
+
+// 更新抽签按钮文案和状态
+function updateSpinButton() {
+  const btn = document.getElementById('spinBtn');
+  if (!btn) return;
+
+  if (!S.user) {
+    btn.textContent = '求签问天';
+    btn.disabled = false;
+    return;
+  }
+
+  const count = S.user.lotteryCount || 0;
+  btn.textContent = `求签问天（剩余${count}次）`;
+  btn.disabled = count <= 0;
+}
+
+function closeLottery() {
+  document.getElementById('lotteryOverlay').style.display = 'none';
+  if (LOT.animId) { clearTimeout(LOT.animId); LOT.animId = null; }
+}
+
+// ---------- 设定抽签次数弹窗 ----------
+function openAddCountModal() {
+  if (!amIAdmin()) { toast('非管理员，无此权限'); return; }
+
+  // 填充用户下拉列表
+  const select = document.getElementById('targetUserSelect');
+  select.innerHTML = '<option value="">请选择用户</option>';
+  S.users.forEach(u => {
+    const opt = document.createElement('option');
+    opt.value = u.id;
+    opt.textContent = `${u.gameName} (当前${u.lotteryCount || 0}次)`;
+    select.appendChild(opt);
+  });
+
+  document.getElementById('addCountInput').value = '';
+  document.getElementById('addCountOverlay').style.display = 'flex';
+}
+
+function closeAddCountModal() {
+  document.getElementById('addCountOverlay').style.display = 'none';
+}
+
+// ---------- 签到功能 ----------
+let signInState = {
+  alreadySignedIn: false,
+  signInCount: 0
+};
+
+// 初始化签到状态（通过 API，用于签到完成后刷新等场景）
+async function initSignIn() {
+  if (!S.user) return;
+
+  try {
+    const result = await api('GET', `/api/sign-in/status?userId=${S.user.id}`);
+    signInState.alreadySignedIn = result.alreadySignedIn;
+    signInState.signInCount = result.signInCount;
+    updateSignInFloat();
+  } catch (e) {
+    console.error('获取签到状态失败:', e);
+  }
+}
+
+// 方案2：用本地 S.user 数据初始化签到状态，无需 API 请求
+// 逻辑与服务端 /api/sign-in/status 一致：比较 lastSignInDate 和今日日期
+function initSignInFromUserData() {
+  if (!S.user) return;
+  const today = new Date().toISOString().split('T')[0];
+  const lastSignIn = S.user.lastSignInDate
+    ? S.user.lastSignInDate.split('T')[0]
+    : null;
+  signInState.alreadySignedIn = lastSignIn === today;
+  signInState.signInCount = S.user.signInCount || 0;
+  updateSignInFloat();
+}
+
+// 更新签到浮窗显示
+function updateSignInFloat() {
+  const float = document.getElementById('signInFloat');
+  const btn = document.getElementById('signInBtn');
+
+  if (!float || !btn) return;
+
+  if (!S.user) {
+    float.style.display = 'none';
+    return;
+  }
+
+  // 根据今天是否签到来决定浮窗显示
+  if (signInState.alreadySignedIn) {
+    // 已签到，隐藏浮窗
+    float.style.display = 'none';
+  } else {
+    // 未签到，显示浮窗
+    float.style.display = 'block';
+    btn.disabled = false;
+    btn.querySelector('.sign-in-text').textContent = '每日签到';
+  }
+}
+
+// 执行签到
+async function doSignIn() {
+  if (!S.user) {
+    toast('请先登录');
+    return;
+  }
+
+  if (signInState.alreadySignedIn) {
+    toast('今日已签到');
+    return;
+  }
+
+  const btn = document.getElementById('signInBtn');
+  btn.disabled = true;
+  btn.querySelector('.sign-in-text').textContent = '签到中...';
+
+  try {
+    const result = await api('POST', '/api/sign-in', {
+      userId: S.user.id
+    });
+
+    // 更新本地数据
+    signInState.alreadySignedIn = true;
+    signInState.signInCount = result.signInCount;
+    S.user.lotteryCount = result.lotteryCount;
+    S.user.signInCount = result.signInCount;
+    S.user.contributionPoints = result.contributionPoints;
+    saveUser(S.user);
+    const currentUserIndex = S.users.findIndex(u => u.id === S.user.id);
+    if (currentUserIndex !== -1) {
+      S.users[currentUserIndex] = { ...S.users[currentUserIndex], signInCount: result.signInCount, lotteryCount: result.lotteryCount, contributionPoints: result.contributionPoints };
+    }
+    renderUserList();
+
+    // 更新抽签按钮
+    updateSpinButton();
+
+    // 显示签到成功弹窗
+    document.getElementById('signInCountDisplay').textContent = result.signInCount;
+    document.getElementById('signInSuccessOverlay').style.display = 'flex';
+
+    // 3秒后自动关闭
+    setTimeout(() => {
+      document.getElementById('signInSuccessOverlay').style.display = 'none';
+      // 隐藏浮窗
+      document.getElementById('signInFloat').style.display = 'none';
+    }, 3000);
+
+  } catch (e) {
+    if (e.alreadySignedIn) {
+      signInState.alreadySignedIn = true;
+      updateSignInFloat();
+      toast('今日已签到');
+    } else {
+      toast(e.message || '签到失败');
+      btn.disabled = false;
+      btn.querySelector('.sign-in-text').textContent = '每日签到';
+    }
+  }
+}
+
+async function submitAddCount() {
+  const targetUserId = document.getElementById('targetUserSelect').value;
+  const count = parseInt(document.getElementById('addCountInput').value);
+
+  if (!targetUserId) { toast('请选择用户'); return; }
+  if (isNaN(count) || count < 0) { toast('请输入有效的次数'); return; }
+
+  showLoading('设定中...');
+  try {
+    const result = await api('POST', '/api/lottery/add-count', {
+      adminId: S.user.id,
+      targetUserId,
+      count
+    });
+    toast(`已将 ${result.gameName} 的抽签次数设定为 ${result.newCount} 次`);
+
+    const targetUser = S.users.find(u => u.id === targetUserId);
+    if (targetUser) {
+      targetUser.lotteryCount = result.newCount;
+    }
+    if (S.user && S.user.id === targetUserId) {
+      S.user.lotteryCount = result.newCount;
+    }
+    updateSpinButton();
+    const select = document.getElementById('targetUserSelect');
+    if (select) {
+      S.users.forEach(u => {
+        const opt = Array.from(select.options).find(o => o.value === u.id);
+        if (opt) {
+          opt.textContent = `${u.gameName} (当前${u.lotteryCount || 0}次)`;
+        }
+      });
+    }
+
+    closeAddCountModal();
+  } catch (e) {
+    toast(e.message || '操作失败');
+  } finally {
+    hideLoading();
+  }
+}
+
+// ---------- 方格轨道渲染 ----------
+function slotCellHTML(slot, i, isAdmin) {
+  const isEmpty = slot.quantity === 0;
+  const badge = (isAdmin && slot.isWinning) ? '<div class="slot-win-badge">★</div>' : '';
+  const qty = (slot.isWinning && slot.quantity >= 0) ? `<div class="slot-cell-qty">×${slot.quantity}</div>` : '';
+  return badge + `<div class="slot-cell-text">${esc(slot.text || '谢谢参与')}</div>` + qty;
+}
+
+function renderSlotRing() {
+  const wrap = document.getElementById('slotRingWrap');
+  if (!wrap) return;
+  const isAdmin = amIAdmin();
+
+  wrap.querySelectorAll('.slot-cell').forEach(el => el.remove());
+  const center = document.getElementById('slotCenter');
+
+  (LOT.slots.length ? LOT.slots : Array(16).fill({ text: '谢谢参与', quantity: -1, isWinning: false }))
+    .forEach((slot, i) => {
+      const pos = SLOT_POS[i];
+      const cell = document.createElement('div');
+      cell.className = [
+        'slot-cell',
+        slot.quantity === 0 ? 'empty' : '',
+        i === LOT.currentPos ? 'active' : '',
+        (isAdmin && !LOT.spinning) ? 'admin-editable' : '',
+      ].filter(Boolean).join(' ');
+      cell.dataset.idx = i;
+      cell.style.gridRow = pos.r;
+      cell.style.gridColumn = pos.c;
+      cell.innerHTML = slotCellHTML(slot, i, isAdmin);
+      if (isAdmin && !LOT.spinning) cell.onclick = () => adminEditSlot(i);
+      wrap.insertBefore(cell, center);
+    });
+
+  const hint = document.getElementById('adminWheelHint');
+  if (hint) hint.style.display = isAdmin ? 'block' : 'none';
+
+  const btn = document.getElementById('spinBtn');
+  if (btn && !LOT.spinning) btn.disabled = false;
+}
+
+// 轻量刷新（WS 推送时调用）
+function redrawWheel() {
+  const wrap = document.getElementById('slotRingWrap');
+  if (!wrap) return;
+  const isAdmin = amIAdmin();
+  wrap.querySelectorAll('.slot-cell[data-idx]').forEach(cell => {
+    const i = parseInt(cell.dataset.idx);
+    const slot = LOT.slots[i];
+    if (!slot) return;
+    cell.className = [
+      'slot-cell',
+      slot.quantity === 0 ? 'empty' : '',
+      i === LOT.currentPos ? 'active' : '',
+      (isAdmin && !LOT.spinning) ? 'admin-editable' : '',
+    ].filter(Boolean).join(' ');
+    cell.innerHTML = slotCellHTML(slot, i, isAdmin);
+    cell.onclick = (isAdmin && !LOT.spinning) ? () => adminEditSlot(i) : null;
+  });
+}
+
+// ---------- 跑格动画 ----------
+// 减速阶段：直接从 startPos 减速停到 targetPos，无额外圈数
+function animateSlotRun(startPos, targetPos, n, onDone) {
+  const stepsToTarget = ((targetPos - startPos) % n + n) % n || n;
+  // 第2圈：从当前位置直接减速到目标格，不额外多跑
+  const positions = [];
+  for (let i = 0; i <= stepsToTarget; i++) positions.push((startPos + i) % n);
+
+  let step = 0;
+  function tick() {
+    highlightCell(positions[step]);
+    LOT.currentPos = positions[step];
+    step++;
+    if (step >= positions.length) { LOT.animId = null; onDone(); return; }
+
+    // ease-out：从快（45ms）到慢（260ms）
+    const progress = step / positions.length;
+    const delay = 45 + (260 - 45) * Math.pow(progress, 2.2);
+    LOT.animId = setTimeout(tick, delay);
+  }
+  tick();
+}
+
+function highlightCell(idx) {
+  document.querySelectorAll('#slotRingWrap .slot-cell[data-idx]').forEach(cell => {
+    if (parseInt(cell.dataset.idx) === idx) cell.classList.add('active');
+    else cell.classList.remove('active');
+  });
+}
+
+// ---------- 抽奖逻辑 ----------
+// 两阶段动画：
+//   阶段1 - 点击立刻快速转动（60ms/格），同时后台请求 API
+//   阶段2 - API 返回后减速停到目标格，结束时显示结果
+async function handleSpin() {
+  if (LOT.spinning) return;
+  if (!S.user) { toast('请先踏入江湖，方可抽签问天'); return; }
+
+  // 检查抽签次数
+  const count = S.user.lotteryCount || 0;
+  if (count <= 0) {
+    toast('本周抽签次数已用尽，请待周一重置');
+    return;
+  }
+
+  LOT.spinning = true;
+  const btn = document.getElementById('spinBtn');
+  btn.disabled = true; btn.textContent = '签途漫漫…';
+  document.getElementById('lotteryResult').style.display = 'none';
+  document.querySelectorAll('.slot-cell').forEach(el => {
+    el.classList.remove('admin-editable'); el.onclick = null;
+  });
+
+  const n = LOT.slots.length || 16;
+  const MIN_FAST_LAPS = 1; // 至少快转 1 圈再减速
+  let fastSteps = 0;
+  let pendingResult = null; // API 返回后赋值
+  let apiError = null;
+
+  // 快转阶段：60ms/格，均匀快转
+  function fastTick() {
+    LOT.currentPos = (LOT.currentPos + 1) % n;
+    highlightCell(LOT.currentPos);
+    fastSteps++;
+
+    const doneMinLaps = fastSteps >= MIN_FAST_LAPS * n;
+
+    if (doneMinLaps && apiError) {
+      // API 出错，停止并提示
+      LOT.spinning = false;
+      updateSpinButton();
+      renderSlotRing();
+      toast(apiError);
+      return;
+    }
+
+    if (doneMinLaps && pendingResult) {
+      // API 已返回，进入减速阶段
+      animateSlotRun(LOT.currentPos, pendingResult.slotIndex, n, () => {
+        showSpinResult(pendingResult);
+      });
+      return;
+    }
+
+    LOT.animId = setTimeout(fastTick, 45);
+  }
+
+  // 立刻开始快转
+  fastTick();
+
+  // 同时发出 API 请求
+  try {
+    pendingResult = await api('POST', '/api/lottery/spin', { userId: S.user.id });
+  } catch (e) {
+    apiError = e.message;
+  }
+}
+
+function showSpinResult(result) {
+  const btn = document.getElementById('spinBtn');
+  LOT.currentPos = result.slotIndex;
+  LOT.spinning = false;
+
+  // 更新用户剩余次数
+  if (S.user && result.remainingCount !== undefined) {
+    S.user.lotteryCount = result.remainingCount;
+    // 同时更新 S.users 中的数据
+    const userInList = S.users.find(u => u.id === S.user.id);
+    if (userInList) {
+      userInList.lotteryCount = result.remainingCount;
+    }
+    // 刷新下拉列表显示
+    const select = document.getElementById('targetUserSelect');
+    if (select) {
+      S.users.forEach(u => {
+        const opt = Array.from(select.options).find(o => o.value === u.id);
+        if (opt) {
+          opt.textContent = `${u.gameName} (当前${u.lotteryCount || 0}次)`;
+        }
+      });
+    }
+  }
+
+  updateSpinButton();
+
+  const el = document.getElementById('lotteryResult');
+  el.style.display = 'block';
+  el.className = 'lottery-result ' + (result.won ? 'won' : 'lost');
+  el.textContent = result.message;
+
+  // 乐观更新本地数量
+  if (result.won && LOT.slots[result.slotIndex]) {
+    const q = LOT.slots[result.slotIndex].quantity;
+    if (q > 0) LOT.slots[result.slotIndex].quantity = q - 1;
+  }
+  renderSlotRing();
+  // 动画已结束，补刷轮播和记录（WS 推送时若正在转动会跳过，此处统一更新）
+  updateWinnerBanner();
+  renderLotteryRecords();
+}
+
+// ---------- 管理员编辑格子 ----------
+function adminEditSlot(slotIdx) {
+  if (LOT.spinning) return;
+  const slot = LOT.slots[slotIdx];
+  if (!slot) return;
+  const qty = slot.quantity;
+  const isWinning = !!slot.isWinning;
+  let qtyOpts = `<option value="-1"${qty === -1 ? ' selected' : ''}>无限</option>`;
+  for (let i = 0; i <= 10; i++) {
+    qtyOpts += `<option value="${i}"${qty === i ? ' selected' : ''}>${i === 0 ? '0（已空）' : i}</option>`;
+  }
+  openModal('编辑签文', `
+<div class="fg">
+  <label class="fl">签文内容 <span class="req">*</span></label>
+  <input class="fi" id="slotText" value="${esc(slot.text || '')}" maxlength="8" placeholder="最多8字">
+</div>
+<div class="fg">
+  <label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+    <input type="checkbox" id="slotIsWinning" ${isWinning ? 'checked' : ''}
+      style="width:16px;height:16px;accent-color:var(--gold);cursor:pointer"
+      onchange="document.getElementById('slotQtyRow').style.display=this.checked?'':'none'">
+    <span>此格为中奖格 ★</span>
+  </label>
+  <div class="fh">勾选后抽中此格将触发恭喜提示及顶部播报</div>
+</div>
+<div class="fg" id="slotQtyRow" style="${isWinning ? '' : 'display:none'}">
+  <label class="fl">剩余数量</label>
+  <select class="fs" id="slotQty">${qtyOpts}</select>
+  <div class="fh">选"无限"则不限制抽取次数</div>
+</div>
+<div class="fbtns">
+  <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+  <button class="btn btn-primary" onclick="submitSlotEdit(${slotIdx})">落笔成册</button>
+</div>
+  `);
+}
+
+async function submitSlotEdit(slotIdx) {
+  const text = document.getElementById('slotText').value.trim();
+  const isWinning = document.getElementById('slotIsWinning').checked;
+  const qtyEl = document.getElementById('slotQty');
+  const qty = qtyEl ? parseInt(qtyEl.value) : -1;
+  if (!text) { toast('签文不可为空'); return; }
+  try {
+    const updated = await api('PUT', `/api/lottery/slots/${slotIdx}`, { adminId: S.user.id, text, quantity: qty, isWinning });
+    // 乐观更新本地数据，不等 WS 广播
+    if (LOT.slots[slotIdx] !== undefined) LOT.slots[slotIdx] = updated;
+    closeModal();
+    renderSlotRing();
+    toast('签文已落定');
+  } catch (e) { toast(e.message); }
+}
+
+// ---------- 中奖记录渲染 ----------
+function renderLotteryRecords() {
+  const list = document.getElementById('recordsList');
+  const clearBtn = document.getElementById('clearRecordsBtn');
+  if (!list) return;
+
+  const isAdmin = amIAdmin();
+  if (clearBtn) clearBtn.style.display = isAdmin ? '' : 'none';
+
+  if (!LOT.winners.length) {
+    list.innerHTML = '<div class="records-empty">尚无得道者，江湖等待奇缘</div>';
+    return;
+  }
+
+  // 倒序展示（最新在最前）
+  const rows = [...LOT.winners].reverse().map(w => {
+    const d = new Date(w.timestamp);
+    const time = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    return `<tr>
+  <td>${esc(w.gameName)}</td>
+  <td>${esc(w.prize)}</td>
+  <td style="color:var(--text-muted)">${time}</td>
+</tr>`;
+  }).join('');
+
+  list.innerHTML = `<table class="records-table">
+<thead><tr><th>游侠</th><th>所得</th><th>时辰</th></tr></thead>
+<tbody>${rows}</tbody>
+  </table>`;
+}
+
+// ---------- 管理员：清空轮播（仅隐藏 banner，不删记录） ----------
+async function adminClearBanner() {
+  if (!amIAdmin()) return;
+  try {
+    await api('POST', '/api/lottery/clear-banner', { adminId: S.user.id });
+    toast('轮播已清空');
+  } catch (e) { toast(e.message); }
+}
+
+// ---------- 管理员：清空中奖记录（同时清空轮播） ----------
+async function adminClearWinners() {
+  if (!amIAdmin()) return;
+  try {
+    await api('POST', '/api/lottery/clear-winners', { adminId: S.user.id });
+    toast('中奖记录已清空，江湖焕然一新');
+  } catch (e) { toast(e.message); }
+}
+
+// ---------- 中奖 Banner（单次从右入场→左离场） ----------
+// 只展示 1 小时内 且 在管理员最后一次"清空轮播"之后 的中奖
+// ---------- 中奖 Banner：CSS infinite 轮播，有有效中奖者就持续滚动 ----------
+function updateWinnerBanner() {
+  const banner = document.getElementById('winnerBanner');
+  const track = document.getElementById('bannerTrack');
+  if (!banner || !track) return;
+
+  // 双重过滤：1小时内 & 管理员清空时间之后
+  const oneHourAgo = Date.now() - 3600 * 1000;
+  const clearedAt = LOT.bannerClearedAt || 0;
+  const cutoff = Math.max(oneHourAgo, clearedAt);
+  const recent = (LOT.winners || []).filter(w => new Date(w.timestamp).getTime() > cutoff);
+
+  if (!recent.length) {
+    banner.style.display = 'none';
+    track.style.animation = 'none';
+    track.dataset.content = '';
+    return;
+  }
+
+  const content = recent.map(w => `${esc(w.gameName)} 喜得「${esc(w.prize)}」`).join('　　⚔　　');
+
+  // 内容未变且 banner 已在滚动，无需重启
+  if (track.dataset.content === content && banner.style.display !== 'none') return;
+
+  track.dataset.content = content;
+  track.innerHTML = content;
+
+  // 根据内容长度动态调整速度（字越多越慢，保持视觉节奏）
+  const dur = Math.min(Math.max(content.length * 0.18, 8), 25);
+
+  // 重置再启动，确保从正确位置开始
+  track.style.animation = 'none';
+  track.offsetWidth; // 触发 reflow，使 animation 重置生效
+  track.style.animation = `bannerMarquee ${dur}s linear infinite`;
+
+  banner.style.display = 'flex';
+}
+
+// 每分钟检查 1 小时窗口是否过期，自动隐藏 banner
+setInterval(updateWinnerBanner, 60000);
+
+async function init() {
+  const t0 = performance.now();
+  console.log('[性能] init开始');
+
+  showLoading('初始化中...');
+  S.date = todayStr();
+
+  // 读取分享链接参数
+  const joinParam = new URLSearchParams(location.search).get('join');
+  if (joinParam) {
+    S.pendingJoin = joinParam;
+    history.replaceState({}, '', location.pathname);
+  }
+  console.log(`[性能] 参数处理完成: ${(performance.now() - t0).toFixed(2)}ms`);
+
+  // 一次性加载所有核心数据
+  const t1 = performance.now();
+  try {
+    const [us, ts] = await Promise.all([
+      api('GET', '/api/users'),
+      api('GET', '/api/teams')
+    ]);
+    console.log(`[性能] API请求完成: ${(performance.now() - t1).toFixed(2)}ms`);
+
+    S.users = us;
+    S.teams = ts;
+
+    // 恢复用户状态
+    const saved = loadUser();
+    if (saved) {
+      const found = us.find(u => u.id === saved.id && u.gameName === saved.gameName);
+      if (found) {
+        S.user = found;
+      }
+    }
+    console.log(`[性能] 数据处理完成: ${(performance.now() - t1).toFixed(2)}ms`);
+  } catch (e) {
+    console.error('数据加载失败:', e);
+  }
+
+  // 渲染核心内容
+  const t2 = performance.now();
+  updateMyBadge();
+  console.log(`[性能] updateMyBadge: ${(performance.now() - t2).toFixed(2)}ms`);
+
+  const t3 = performance.now();
+  renderDateRow();
+  console.log(`[性能] renderDateRow: ${(performance.now() - t3).toFixed(2)}ms`);
+
+  const t4 = performance.now();
+  renderUserList(true);
+  console.log(`[性能] renderUserList: ${(performance.now() - t4).toFixed(2)}ms`);
+
+  const t5 = performance.now();
+  renderTeams();
+  console.log(`[性能] renderTeams: ${(performance.now() - t5).toFixed(2)}ms`);
+
+  setupDateSwipe();
+  hideLoading();
+  console.log(`[性能] init总耗时: ${(performance.now() - t0).toFixed(2)}ms`);
+
+  // 建立WebSocket连接
+  connectWS();
+
+  // WS备用方案：仅在连接失败时启动轮询
+  setTimeout(() => {
+    if (!S.ws || S.ws.readyState !== 1) {
+      startPoll();
+    }
+  }, 1500);
+
+  // 次要功能延迟加载
+  setTimeout(() => {
+    if (S.user) {
+      initSignIn();
+      checkUnreadMessages();
+      showLatestUnreadNotice();
+    }
+    initLottery().catch(e => console.warn('抽奖初始化失败:', e));
+    initBgm().catch(e => console.warn('BGM初始化失败:', e));
+  }, 300);
+}
+
+function setupDateSwipe() {
+  const wrap = document.getElementById('teamsWrap');
+  let startX = 0, startY = 0, moved = false;
+
+  wrap.addEventListener('touchstart', e => {
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    moved = false;
+  }, { passive: true });
+
+  wrap.addEventListener('touchmove', e => {
+    // 只要水平位移明显大于垂直位移，就阻止页面上下滚动
+    const dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+    if (Math.abs(dx) > Math.abs(dy) + 8) {
+      moved = true;
+      e.preventDefault();
+    }
+  }, { passive: false });
+
+  wrap.addEventListener('touchend', e => {
+    if (!moved) return;
+    const dx = e.changedTouches[0].clientX - startX;
+    if (Math.abs(dx) < 50) return; // 位移太小忽略
+
+    const dates = dateRange().map(d => localDateStr(d));
+    const idx = dates.indexOf(S.date);
+    if (dx < 0 && idx < dates.length - 1) {
+      selectDate(dates[idx + 1], 'left');   // 向左滑 → 下一天
+    } else if (dx > 0 && idx > 0) {
+      selectDate(dates[idx - 1], 'right');  // 向右滑 → 上一天
+    }
+  }, { passive: true });
+}
+
+// ====================================================
+// BGM 逻辑（多曲目 + 随机切歌）
+// ====================================================
+let bgmList = [];        // [{id, url, name}, ...]
+let bgmCurrentIdx = -1;  // 当前播放索引
+let bgmHasPlayed = false;
+
+// BGM 曲目名称 UI 更新
+function updateBgmTrackName(name) {
+  const container = document.getElementById('bgmTrackInfo');
+  if (!container) return;
+  container.innerHTML = `<span class="bgm-track-name" id="bgmTrackNameText">${esc(name || '未知曲目')}</span>`;
+  const textEl = document.getElementById('bgmTrackNameText');
+  // 动态计算滚动速度：基础 6 秒 + 每字 0.5 秒
+  const duration = 6 + (name ? name.length : 4) * 0.5;
+  textEl.style.animation = `bgmMarquee ${duration}s linear infinite`;
+}
+
+function pickRandomBgmIndex(excludeIdx = -1) {
+  if (!bgmList.length) return -1;
+  if (bgmList.length === 1) return 0;
+
+  let idx = -1;
+  do {
+    idx = Math.floor(Math.random() * bgmList.length);
+  } while (idx === excludeIdx);
+  return idx;
+}
+
+function applyBgmTrack(index) {
+  const audio = document.getElementById('bgmAudio');
+  if (!audio || index < 0 || index >= bgmList.length) return;
+
+  bgmCurrentIdx = index;
+  audio.src = bgmList[index].url;
+  updateBgmTrackName(bgmList[index].name);
+}
+
+// 初始化：从服务端 music 目录加载曲目并随机选一首
+async function initBgm() {
+  try {
+    const tracks = await api('GET', '/api/music');
+    bgmList = Array.isArray(tracks) ? tracks.filter(track => track && track.url) : [];
+  } catch (e) {
+    console.warn('获取 BGM 列表失败:', e);
+    bgmList = [];
+  }
+
+  if (!bgmList.length) {
+    updateBgmTrackName('暂无可用曲目');
+    return;
+  }
+
+  const initialIdx = pickRandomBgmIndex();
+  applyBgmTrack(initialIdx);
+
+  const audio = document.getElementById('bgmAudio');
+  // 尝试自动播放（可能被浏览器拦截）
+  audio.play().then(() => {
+    bgmHasPlayed = true;
+    document.getElementById('bgmBtn').classList.add('playing');
+  }).catch(() => {
+    // 预期的拦截，静默失败，等待用户首次点击页面
+  });
+}
+
+function toggleBgm() {
+  const bgmAudio = document.getElementById('bgmAudio');
+  const bgmBtn = document.getElementById('bgmBtn');
+  if (bgmAudio.paused) {
+    bgmAudio.play().then(() => {
+      bgmHasPlayed = true;
+      bgmBtn.classList.add('playing');
+    }).catch(e => console.warn('BGM 播放被浏览器拦截:', e));
+  } else {
+    bgmAudio.pause();
+    bgmBtn.classList.remove('playing');
+  }
+}
+
+function nextBgm() {
+  if (!bgmList.length) return;
+  const audio = document.getElementById('bgmAudio');
+  const bgmBtn = document.getElementById('bgmBtn');
+  const nextBtn = document.getElementById('bgmNext');
+  const wasPlaying = !audio.paused;
+  const idx = pickRandomBgmIndex(bgmCurrentIdx);
+
+  // 切歌动画
+  nextBtn.classList.remove('skip-flash');
+  void nextBtn.offsetWidth;
+  nextBtn.classList.add('skip-flash');
+  nextBtn.addEventListener('animationend', () => nextBtn.classList.remove('skip-flash'), { once: true });
+
+  applyBgmTrack(idx);
+
+  if (wasPlaying) {
+    audio.play().then(() => bgmBtn.classList.add('playing')).catch(() => { });
+  }
+}
+
+// 监听页面任意第一次点击，自动播放 BGM
+function unlockAudio() {
+  const bgmAudio = document.getElementById('bgmAudio');
+  const bgmBtn = document.getElementById('bgmBtn');
+  if (!bgmHasPlayed && bgmAudio && bgmAudio.paused && bgmAudio.src) {
+    bgmAudio.play().then(() => {
+      bgmHasPlayed = true;
+      bgmBtn.classList.add('playing');
+      document.removeEventListener('click', unlockAudio, { capture: true });
+    }).catch(() => { });
+  } else if (bgmHasPlayed) {
+    document.removeEventListener('click', unlockAudio, { capture: true });
+  }
+}
+document.addEventListener('click', unlockAudio, { capture: true });
+
+// ====================================================
+// 信箱逻辑
+// ====================================================
+// 信箱未读角标
+let msgUnreadState = {
+  hasUnreadNotice: false,
+  hasUnreadSuggestion: false,
+  noticeViewed: false, // 标记是否已查看过告示
+  suggestionViewed: false // 标记是否已查看过建议
+};
+
+// 检查并更新信箱角标
+function updateMsgBadge() {
+  const badge = document.getElementById('msgBadge');
+  if (!badge) return;
+
+  // 未登录用户不显示红点
+  if (!S.user || !S.user.id) {
+    badge.style.display = 'none';
+    return;
+  }
+
+  const isAdmin = S.user && S.user.isAdmin;
+  // 用户：检查未读告示；管理员：检查未读告示+未读建议
+  // 只有在未查看过的情况下才显示角标
+  const showBadge = (!msgUnreadState.noticeViewed && msgUnreadState.hasUnreadNotice) ||
+    (isAdmin && !msgUnreadState.suggestionViewed && msgUnreadState.hasUnreadSuggestion);
+  badge.style.display = showBadge ? 'block' : 'none';
+}
+
+// 标记为已查看
+async function markMsgAsRead(type) {
+  if (type === 'notices') {
+    msgUnreadState.noticeViewed = true;
+  } else if (type === 'suggestions') {
+    msgUnreadState.suggestionViewed = true;
+  }
+  updateMsgBadge();
+}
+
+// 标记消息已读（调用后端API）
+async function markAsRead(type, id) {
+  if (!S.user) return;
+
+  try {
+    if (type === 'notices') {
+      await api('POST', '/api/notices/' + id + '/read', { userId: S.user.id });
+    } else if (type === 'suggestions' && S.user.isAdmin) {
+      await api('POST', '/api/suggestions/' + id + '/read', { adminId: S.user.id });
+    }
+  } catch (e) {
+    console.error('标记已读失败:', e);
+  }
+}
+
+// ====================================================
+function showMsgBox() {
+  // 未登录用户点击信封应该弹出登录
+  if (!S.user || !S.user.id) {
+    showIdentityModal();
+    return;
+  }
+  document.getElementById('msgBoxModal').classList.add('show');
+  renderMsgTabs();
+  switchMsgTab('notices');
+}
+
+function hideMsgBox() {
+  document.getElementById('msgBoxModal').classList.remove('show');
+}
+
+function renderMsgTabs() {
+  const tabsWrap = document.getElementById('msgTabs');
+  const isAdmin = S.user && S.user.isAdmin;
+  let html = `<div class="msgbox-tab active" onclick="switchMsgTab('notices', this)">告示</div>`;
+  if (isAdmin) {
+    html += `<div class="msgbox-tab" onclick="switchMsgTab('postNotice', this)">贴告示</div>`;
+  }
+  html += `<div class="msgbox-tab" onclick="switchMsgTab('suggestions', this)">建议箱</div>`;
+  tabsWrap.innerHTML = html;
+}
+
+function switchMsgTab(tabId, el) {
+  if (el) {
+    document.querySelectorAll('.msgbox-tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+  } else {
+    // default first tab
+    const first = document.querySelector('.msgbox-tab');
+    if (first) first.classList.add('active');
+  }
+
+  document.querySelectorAll('.msg-panel').forEach(p => p.classList.remove('active'));
+  const pnl = document.getElementById('panel-' + tabId);
+  if (pnl) pnl.classList.add('active');
+
+  if (tabId === 'notices') loadNotices();
+  if (tabId === 'suggestions') loadSuggestions();
+}
+
+async function loadNotices() {
+  const container = document.getElementById('noticesList');
+  container.innerHTML = '<div style="text-align:center;color:#888;padding:20px;">加载中...</div>';
+  try {
+    const userId = S.user ? S.user.id : '';
+    const notices = await api('GET', '/api/notices?userId=' + userId);
+    if (!notices.length) {
+      container.innerHTML = '<div style="text-align:center;color:#888;padding:20px;">暂无告示</div>';
+      msgUnreadState.hasUnreadNotice = false;
+      updateMsgBadge();
+      return;
+    }
+    const isAdmin = S.user && S.user.isAdmin;
+
+    // 检查是否有未读
+    const hasUnread = notices.some(n => !n.isRead);
+    msgUnreadState.hasUnreadNotice = hasUnread;
+    updateMsgBadge();
+
+    container.innerHTML = notices.map(n => `
+    <div class="msg-item ${n.isRead ? 'msg-item-read' : ''}" onclick="openMsgDetail(this, '告示详情'); markMsgAsRead('notices'); markAsRead('notices', '${n.id}');">
+      <div class="msg-item-head">
+        <span class="msg-item-date">${n.date}</span>
+        ${!n.isRead ? '<span class="msg-unread-dot"></span>' : ''}
+      </div>
+      <div class="msg-item-content-preview" style="display:none;">${esc(n.content)}</div>
+      <div class="msg-item-content">${esc(n.content)}</div>
+      ${isAdmin ? `<button class="msg-delete-btn" style="display:block;" onclick="deleteMsg(event, 'notices', '${n.id}')">删除</button>` : ''}
+    </div>
+    `).join('');
+  } catch (e) {
+    container.innerHTML = '<div style="text-align:center;color:#ff4d4f;padding:20px;">加载失败</div>';
+  }
+}
+
+async function loadSuggestions() {
+  const container = document.getElementById('suggestionsWrap');
+  const isAdmin = S.user && S.user.isAdmin;
+  if (!isAdmin) {
+    // 普通用户展示输入框
+    container.innerHTML = `
+      <div class="msg-form">
+        <textarea id="sugContent" class="msg-textarea" placeholder="江湖路长，有什么心里话、吐槽、或者建议，请尽情在此书写..."></textarea>
+        <button class="msg-submit" id="sugSubmit" onclick="submitSuggestion()">提交建议</button>
+      </div>
+    `;
+    return;
+  }
+
+  // 管理员展示列表
+  container.innerHTML = '<div style="text-align:center;color:#888;padding:20px;">加载中...</div>';
+  try {
+    const sugs = await api('GET', '/api/suggestions?adminId=' + S.user.id);
+    if (!sugs.length) {
+      container.innerHTML = '<div style="text-align:center;color:#888;padding:20px;">暂无建议</div>';
+      msgUnreadState.hasUnreadSuggestion = false;
+      updateMsgBadge();
+      return;
+    }
+
+    // 检查是否有未读建议
+    const hasUnread = sugs.some(s => !s.isRead);
+    msgUnreadState.hasUnreadSuggestion = hasUnread;
+    updateMsgBadge();
+
+    container.innerHTML = `<div style="display:flex;flex-direction:column;gap:12px;">` + sugs.map(s => `
+    <div class="msg-item msg-item-suggestion ${s.isRead ? 'msg-item-read' : ''}" onclick="openMsgDetail(this, '建议详情'); markMsgAsRead('suggestions'); markAsRead('suggestions', '${s._id}');">
+      <div class="msg-item-head-suggestion">
+        <div class="msg-item-left">
+          <span class="msg-item-author">${esc(s.gameName)}</span>
+          <span class="msg-item-date">${s.date}</span>
+          ${!s.isRead ? '<span class="msg-unread-dot"></span>' : ''}
+        </div>
+        <button class="msg-delete-btn-top" onclick="deleteMsg(event, 'suggestions', '${s._id}')">删除</button>
+      </div>
+      <div class="msg-item-content-preview" style="display:none;">${esc(s.content)}</div>
+      <div class="msg-item-content">${esc(s.content)}</div>
+    </div>
+    `).join('') + `</div>`;
+  } catch (e) {
+    container.innerHTML = '<div style="text-align:center;color:#ff4d4f;padding:20px;">加载失败</div>';
+  }
+}
+
+async function submitSuggestion() {
+  if (!S.user) return Swal.fire({ title: '请先登录', text: '留名后方可投递建议', icon: 'warning', customClass: { popup: 'swal-dark' } });
+  const btn = document.getElementById('sugSubmit');
+  const content = document.getElementById('sugContent').value.trim();
+  if (!content) return;
+  btn.disabled = true;
+  btn.textContent = '提交中...';
+  try {
+    await api('POST', '/api/suggestions', {
+      userId: S.user.id,
+      gameName: S.user.gameName,
+      content: content,
+      date: todayStr()
+    });
+    document.getElementById('sugContent').value = '';
+    await Swal.fire({ title: '提交成功', text: '感谢你的建议，管理员会认真阅读的！', icon: 'success', customClass: { popup: 'swal-dark' } });
+  } catch (e) {
+    console.error('提交建议失败:', e);
+    Swal.fire({ title: '失败', text: '提交失败，请重试', icon: 'error', customClass: { popup: 'swal-dark' } });
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '提交建议';
+  }
+}
+
+async function postNotice() {
+  const btn = document.getElementById('noticeSubmit');
+  const content = document.getElementById('noticeContent').value.trim();
+  if (!content) return;
+  btn.disabled = true;
+  btn.textContent = '张贴中...';
+  try {
+    await api('POST', '/api/notices', {
+      adminId: S.user.id,
+      content: content,
+      date: todayStr()
+    });
+    document.getElementById('noticeContent').value = '';
+    await Swal.fire({ title: '成功', text: '告示已广而告之', icon: 'success', customClass: { popup: 'swal-dark' } });
+    switchMsgTab('notices');
+  } catch (e) {
+    console.error('发布告示失败:', e);
+    Swal.fire({ title: '失败', text: '贴告示失败，请重试', icon: 'error', customClass: { popup: 'swal-dark' } });
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '发布张贴';
+  }
+}
+
+async function deleteMsg(e, type, id) {
+  e.stopPropagation();
+  const confirmed = await Swal.fire({
+    title: '确认删除？',
+    text: '删除后无法恢复',
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: '删除',
+    cancelButtonText: '取消',
+    customClass: { popup: 'swal-dark' }
+  });
+  if (!confirmed.isConfirmed) return;
+
+  try {
+    await api('DELETE', `/api/${type}/${id}?adminId=${S.user.id}`);
+    await Swal.fire({ title: '成功', text: '删除成功', icon: 'success', customClass: { popup: 'swal-dark' }, timer: 1500, showConfirmButton: false });
+    if (type === 'notices') loadNotices();
+    if (type === 'suggestions') loadSuggestions();
+  } catch (err) {
+    console.error('删除失败:', err);
+    Swal.fire({ title: '失败', text: '删除失败', icon: 'error', customClass: { popup: 'swal-dark' } });
+  }
+}
+
+function openMsgDetail(el, title) {
+  const previewEl = el.querySelector('.msg-item-content-preview');
+  if (!previewEl) return;
+  const content = previewEl.textContent;
+  if (!content || content.trim() === '') return;
+  // 使用 html 属性并替换换行符为 <br> 以正确显示格式
+  const formattedContent = esc(content).replace(/\n/g, '<br>');
+  // 判断是建议详情还是告示详情，用于刷新对应列表
+  const isSuggestion = title.includes('建议');
+  Swal.fire({
+    title: title,
+    html: `<div style="text-align:left;white-space:pre-wrap;">${formattedContent}</div>`,
+    customClass: { popup: 'swal-dark' },
+    confirmButtonText: '阅',
+    confirmButtonColor: '#c8a45e'
+  }).then(() => {
+    // 点击"阅"后刷新列表以更新红点状态
+    if (isSuggestion) {
+      loadSuggestions();
+    } else {
+      loadNotices();
+    }
+  });
+}
+
+// ====================================================
+// 图片懒加载管理器
+// ====================================================
+let lazyImageObserver = null;
+
+function initLazyLoading() {
+  if (!('IntersectionObserver' in window)) {
+    document.querySelectorAll('.lazy-avatar').forEach(img => {
+      if (img.dataset.src) {
+        img.src = img.dataset.src;
+      }
+    });
+    return;
+  }
+
+  lazyImageObserver = new IntersectionObserver((entries, observer) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const img = entry.target;
+        if (img.dataset.src) {
+          img.src = img.dataset.src;
+          img.classList.remove('lazy-avatar');
+          observer.unobserve(img);
+        }
+      }
+    });
+  }, {
+    rootMargin: '50px'
+  });
+
+  document.querySelectorAll('.lazy-avatar').forEach(img => {
+    lazyImageObserver.observe(img);
+  });
+}
+
+function updateLazyLoading() {
+  if (lazyImageObserver) {
+    document.querySelectorAll('.lazy-avatar').forEach(img => {
+      lazyImageObserver.observe(img);
+    });
+  } else {
+    initLazyLoading();
+  }
+}
+
+// ====================================================
+// 图片加载重试机制
+// ====================================================
+const IMAGE_RETRY_CONFIG = {
+  maxRetries: 2,
+  retryDelay: 1000
+};
+
+function setupImageRetry(img) {
+  let retryCount = 0;
+  const originalError = img.onerror;
+
+  img.onerror = function () {
+    retryCount++;
+
+    if (retryCount <= IMAGE_RETRY_CONFIG.maxRetries) {
+      setTimeout(() => {
+        const originalSrc = this.dataset.src || this.src;
+        if (originalSrc && originalSrc !== 'img/default-avatar.jpg') {
+          this.src = `${originalSrc}?retry=${retryCount}`;
+        }
+      }, IMAGE_RETRY_CONFIG.retryDelay * retryCount);
+    } else {
+      this.onerror = null;
+      this.src = 'img/default-avatar.jpg';
+    }
+  };
+}
+
+init();

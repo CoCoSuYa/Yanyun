@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>个人中心 · 燕云十六声</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/profile.css">
+    <link rel="stylesheet" href="css/loading.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+
+<body>
+    <div class="profile-page">
+        <header class="profile-header">
+            <button class="back-btn" type="button" aria-label="返回江湖">
+                <span>←</span>
+                <span>返回江湖</span>
+            </button>
+            <h1 class="header-title">个人中心</h1>
+        </header>
+
+        <main class="profile-main">
+            <section class="profile-card">
+                <div class="avatar-section">
+                    <div class="avatar-wrap is-uploadable" title="点击更换头像">
+                        <img class="avatar-img" src="img/default-avatar.jpg" alt="头像">
+                        <div class="avatar-overlay">
+                            <span>上传头像</span>
+                        </div>
+                    </div>
+                    <input class="avatar-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+                    <div class="avatar-label">头像</div>
+                </div>
+
+                <div class="user-info">
+                    <div class="info-label">游戏名</div>
+                    <h2 class="user-name">未入江湖</h2>
+
+                    <div class="info-label style-label">流派</div>
+                    <div class="user-style-group">
+                        <span class="style-pill style-main" data-role="main">未定</span>
+                        <span class="style-divider" aria-hidden="true">·</span>
+                        <span class="style-pill style-sub is-empty" data-role="sub">暂无辅修</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="stats-strip">
+                <div class="stat-card stat-signin">
+                    <div class="stat-value"><span class="stat-number">0</span><span class="stat-unit">日</span></div>
+                    <div class="stat-label">累计签到</div>
+                </div>
+                <div class="stat-card stat-lottery">
+                    <div class="stat-value"><span class="stat-number">0</span><span class="stat-unit">次</span></div>
+                    <div class="stat-label">剩余抽签</div>
+                </div>
+            </section>
+
+            <section class="achievements-card">
+                <div class="achievements-title">江湖成就</div>
+                <div class="achievements-grid" id="achievementsGrid">
+                    <!-- 成就项将通过JS动态生成 -->
+                </div>
+            </section>
+
+            <section class="profile-actions-card">
+                <div class="profile-actions-title">休闲玩法</div>
+                <p class="profile-actions-desc">前往洞天掘金，在九重秘境中挥钩夺宝。</p>
+                <button class="feature-entry-btn" id="goldGameBtn" type="button">掘金</button>
+            </section>
+        </main>
+    </div>
+
+    <script src="js/profile-demo.js?v=5"></script>
+</body>
+
+</html>

@@ -1,0 +1,513 @@
+/* ====================================================
+   燕云十六声 · 个人中心页样式
+   ==================================================== */
+
+.profile-page {
+    min-height: 100vh;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+}
+
+.profile-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    min-height: 66px;
+    padding: 12px 16px;
+    background: linear-gradient(180deg, rgba(30, 18, 8, 0.96) 0%, rgba(25, 14, 6, 0.92) 70%, rgba(18, 11, 4, 0.78) 100%);
+    border-bottom: 1px solid var(--border);
+}
+
+.back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: transparent;
+    border: 1px solid var(--gold);
+    border-radius: 4px;
+    color: var(--gold);
+    font-family: inherit;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    z-index: 2;
+}
+
+.back-btn:hover {
+    background: rgba(200, 164, 94, 0.15);
+    border-color: var(--gold-light);
+    color: var(--gold-light);
+}
+
+.back-btn:active {
+    transform: scale(0.97);
+}
+
+.header-title {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    margin: 0;
+    font-size: 18px;
+    color: var(--gold-light);
+    letter-spacing: 6px;
+    font-weight: normal;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.profile-main {
+    flex: 1;
+    padding: 20px 16px 28px;
+    max-width: 480px;
+    margin: 0 auto;
+    width: 100%;
+    overflow-y: auto;
+}
+
+.profile-card,
+.stat-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+}
+
+.profile-card {
+    padding: 24px 20px;
+    margin-bottom: 16px;
+    position: relative;
+}
+
+.profile-actions-card {
+    margin-top: 16px;
+    padding: 20px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+}
+
+.profile-actions-title {
+    color: var(--gold-light);
+    font-size: 16px;
+    letter-spacing: 3px;
+    margin-bottom: 8px;
+}
+
+.profile-actions-desc {
+    margin: 0 0 16px;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.7;
+}
+
+.feature-entry-btn {
+    width: 100%;
+    min-height: 44px;
+    border: 1px solid rgba(232, 200, 120, 0.45);
+    border-radius: 6px;
+    background: linear-gradient(180deg, rgba(200, 164, 94, 0.96), rgba(138, 99, 40, 0.96));
+    color: #1f1307;
+    font-family: inherit;
+    font-size: 15px;
+    letter-spacing: 4px;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.18);
+}
+
+.feature-entry-btn:hover {
+    transform: translateY(-1px);
+    border-color: var(--gold-light);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.22);
+}
+
+.feature-entry-btn:active {
+    transform: scale(0.98);
+}
+
+.avatar-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 18px;
+}
+
+.avatar-wrap {
+    width: 114px;
+    height: 114px;
+    border-radius: 50%;
+    border: 2px solid var(--gold);
+    padding: 3px;
+    cursor: default;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.avatar-img {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--bg-card2);
+}
+
+.avatar-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.56);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    border-radius: 50%;
+}
+
+.avatar-wrap.is-uploadable {
+    cursor: pointer;
+}
+
+.avatar-wrap.is-uploadable:hover {
+    border-color: var(--gold-light);
+    transform: scale(1.02);
+}
+
+.avatar-wrap.is-uploadable:hover .avatar-overlay,
+.avatar-wrap.is-uploading .avatar-overlay {
+    opacity: 1;
+}
+
+.avatar-wrap.is-uploading {
+    cursor: progress;
+    border-color: var(--gold-light);
+}
+
+.avatar-overlay span {
+    color: var(--gold-light);
+    font-size: 12px;
+    letter-spacing: 1px;
+}
+
+.avatar-label,
+.info-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    letter-spacing: 3px;
+}
+
+.avatar-label {
+    margin-top: 8px;
+}
+
+.user-info {
+    text-align: center;
+}
+
+.user-name {
+    margin: 8px 0 14px;
+    font-size: 18px;
+    color: var(--gold-light);
+    letter-spacing: 3px;
+    line-height: 1.2;
+}
+
+.style-label {
+    margin-bottom: 10px;
+}
+
+.user-style-group {
+    min-height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.style-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: rgba(200, 164, 94, 0.12);
+    color: var(--text-sec);
+    font-size: 13px;
+    letter-spacing: 1px;
+}
+
+.style-main {
+    color: var(--gold-light);
+    border-color: rgba(232, 200, 120, 0.45);
+    background: rgba(200, 164, 94, 0.18);
+}
+
+.style-sub {
+    color: var(--text);
+}
+
+.style-sub.is-empty {
+    opacity: 0.7;
+}
+
+.style-divider {
+    color: var(--gold-dim);
+    font-size: 14px;
+    line-height: 1;
+}
+
+.style-divider.is-hidden {
+    display: none;
+}
+
+.stats-strip {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 0;
+}
+
+.stat-card {
+    padding: 18px 16px;
+    text-align: center;
+    transition: all 0.2s ease;
+}
+
+.stat-card:hover {
+    border-color: var(--border-hi);
+    transform: translateY(-2px);
+}
+
+.stat-value {
+    display: inline-flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 2px;
+    margin-bottom: 4px;
+}
+
+.stat-number {
+    font-size: 32px;
+    color: var(--gold-light);
+    font-weight: bold;
+    line-height: 1;
+}
+
+.stat-unit {
+    font-size: 14px;
+    color: var(--text-sec);
+}
+
+.stat-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    letter-spacing: 3px;
+}
+
+.profile-notice-card {
+    padding: 16px;
+}
+
+.notice-title {
+    margin-bottom: 8px;
+    font-size: 15px;
+    color: var(--gold);
+    letter-spacing: 3px;
+}
+
+.notice-text {
+    font-size: 13px;
+    color: var(--text-sec);
+    line-height: 1.7;
+}
+
+.toast {
+    position: fixed;
+    bottom: 100px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: rgba(30, 18, 8, 0.95);
+    border: 1px solid var(--gold);
+    border-radius: 4px;
+    padding: 12px 24px;
+    color: var(--gold-light);
+    font-size: 14px;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+    z-index: 2000;
+}
+
+.toast.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+}
+
+@media (max-width: 420px) {
+    .profile-header {
+        min-height: 62px;
+        padding: 10px 14px;
+    }
+
+    .back-btn {
+        padding: 7px 12px;
+        font-size: 13px;
+    }
+
+    .header-title {
+        font-size: 17px;
+        letter-spacing: 4px;
+        max-width: calc(100% - 120px);
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+}
+
+@media (min-width: 481px) {
+    .profile-main {
+        padding: 24px 20px 32px;
+    }
+
+    .profile-card {
+        padding: 28px 24px;
+    }
+
+    .avatar-wrap {
+        width: 104px;
+        height: 104px;
+    }
+
+    .user-name {
+        font-size: 28px;
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.profile-card,
+.stat-card,
+.profile-notice-card {
+    animation: fadeIn 0.4s ease forwards;
+}
+
+.stat-card:nth-child(2) {
+    animation-delay: 0.08s;
+}
+
+/* 成就系统样式 */
+.achievements-card {
+    margin-top: 16px;
+    padding: 20px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+}
+
+.achievements-title {
+    color: var(--gold-light);
+    font-size: 16px;
+    letter-spacing: 3px;
+    margin-bottom: 16px;
+}
+
+.achievements-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+}
+
+.achievement-item {
+    aspect-ratio: 1;
+    background: rgba(200, 164, 94, 0.08);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 12px;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.achievement-item.locked {
+    opacity: 0.4;
+    filter: grayscale(1);
+}
+
+.achievement-item.unlocked {
+    background: rgba(200, 164, 94, 0.15);
+    border-color: var(--gold);
+    box-shadow: 0 0 12px rgba(200, 164, 94, 0.3);
+}
+
+.achievement-item.unlocked:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(200, 164, 94, 0.4);
+}
+
+.achievement-icon {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 8px;
+}
+
+.achievement-name {
+    font-size: 12px;
+    color: var(--text-sec);
+    text-align: center;
+    letter-spacing: 1px;
+}
+
+.achievement-item.unlocked .achievement-name {
+    color: var(--gold-light);
+}
+
+.achievement-progress {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+@media (max-width: 420px) {
+    .achievements-grid {
+        gap: 8px;
+    }
+
+    .achievement-item {
+        padding: 8px;
+    }
+
+    .achievement-icon {
+        width: 36px;
+        height: 36px;
+    }
+
+    .achievement-name {
+        font-size: 11px;
+    }
+}

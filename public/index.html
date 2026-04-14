@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>燕云十六声 · 预约组队</title>
+
+  <!-- 外部样式表 -->
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/loading.css">
+
+  <!-- SweetAlert2 -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+
+<body>
+
+  <!-- 中奖滚动播报 Banner -->
+  <div id="winnerBanner" class="winner-banner" style="display:none">
+    <span class="banner-label">⚔ 近日得道 ⚔</span>
+    <div class="banner-track-wrap">
+      <div class="banner-track" id="bannerTrack"></div>
+    </div>
+  </div>
+
+  <div class="layout">
+    <!-- 左侧用户列表 -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-hd">
+        <h3>江湖游侠</h3>
+        <small id="userCount">共 0 位</small>
+      </div>
+      <div class="user-list" id="userList"></div>
+    </aside>
+
+    <!-- 主区域 -->
+    <div class="main">
+      <!-- 顶部栏 -->
+      <div class="header">
+        <button class="menu-btn" id="menuBtn" onclick="toggleSidebar()">☰</button>
+        <div class="header-title">
+          <h1>燕云十六声</h1>
+          <p>预约组队 · 百舸争流</p>
+        </div>
+        <div class="header-right">
+          <!-- BGM 曲目名称展示 -->
+          <div class="bgm-track-info" id="bgmTrackInfo"></div>
+
+          <div class="bgm-btn" id="bgmBtn" onclick="toggleBgm()" title="播放/暂停背景音乐">🎵</div>
+          <div class="bgm-next" id="bgmNext" onclick="nextBgm()" title="随机切歌">↬</div>
+          <button id="clearBannerBtn" onclick="adminClearBanner()" title="清空轮播（不删记录）">清空轮播</button>
+          <div class="my-badge" id="myBadge" onclick="handleMyBadgeClick()" title="点击查看身份">
+            <div class="my-avatar-wrap">
+              <img class="my-avatar" id="myAvatar" src="img/default-avatar.jpg" alt="">
+            </div>
+            <span class="my-name" id="myName">未登录</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 日期切换条 -->
+      <div class="date-bar">
+        <div class="date-row" id="dateRow"></div>
+      </div>
+
+      <!-- 队伍列表 -->
+      <div class="teams-wrap" id="teamsWrap"></div>
+
+      <!-- 底部按钮 -->
+      <div class="bottom-bar">
+        <button class="btn btn-primary" style="padding:11px 40px;font-size:15px;" onclick="handleCreateTeam()">⚔
+          聚义成队</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 信箱悬浮按钮 -->
+  <div class="msgbox-fab" onclick="showMsgBox()" title="信箱">
+    <span class="msgbox-icon">✉️</span>
+    <span id="msgBadge" class="msgbox-badge" style="display:none"></span>
+  </div>
+
+  <!-- 信箱弹窗 -->
+  <div class="msgbox-modal" id="msgBoxModal">
+    <div class="msgbox-content">
+      <div class="msgbox-close" onclick="hideMsgBox()">&times;</div>
+      <div class="msgbox-header" id="msgTabs">
+        <!-- JS渲染Tabs -->
+      </div>
+      <div class="msgbox-body">
+        <div class="msg-panel" id="panel-notices">
+          <div id="noticesList" style="display:flex;flex-direction:column;gap:12px;"></div>
+        </div>
+        <div class="msg-panel" id="panel-postNotice">
+          <div class="msg-form">
+            <textarea id="noticeContent" class="msg-textarea" placeholder="请输入你要广而告之的告示内容..."></textarea>
+            <button class="msg-submit" id="noticeSubmit" onclick="postNotice()">发布张贴</button>
+          </div>
+        </div>
+        <div class="msg-panel" id="panel-suggestions">
+          <div id="suggestionsWrap" style="height:100%;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 背景音乐 -->
+  <audio id="bgmAudio" src="" loop preload="none" style="display:none;"></audio>
+
+  <!-- 抽奖浮标入口 -->
+  <div id="lotteryEntry" class="lottery-entry" onclick="handleLotteryEntryClick()">
+    <div class="entry-card">
+      <span class="entry-char">福</span>
+      <span class="entry-tip">抽<br>签</span>
+    </div>
+  </div>
+
+  <!-- 抽奖弹窗 -->
+  <div id="lotteryOverlay" class="overlay" style="display:none" onclick="if(event.target===this)closeLottery()">
+    <div class="lottery-modal">
+      <div class="lottery-hd">
+        <span class="lottery-title">天命签诗</span>
+        <button id="addCountBtn" class="lottery-add-count-btn" onclick="openAddCountModal()" title="设定次数"
+          style="display:none">➕</button>
+        <button class="lottery-close" onclick="closeLottery()" title="关闭">✕</button>
+      </div>
+      <!-- 方格轨道（JS 动态注入 24 个 .slot-cell）-->
+      <div id="slotRingWrap" class="slot-ring-wrap">
+        <div class="slot-center" id="slotCenter">
+          <span class="slot-center-title">天　命</span>
+          <span class="slot-center-sub">签诗</span>
+        </div>
+      </div>
+      <div id="lotteryResult" class="lottery-result" style="display:none"></div>
+      <button id="spinBtn" class="btn btn-primary" style="width:100%;margin-bottom:8px"
+        onclick="handleSpin()">求签问天</button>
+      <div id="adminWheelHint" class="admin-wheel-hint" style="display:none">管理员：点击格子可编辑奖品</div>
+      <!-- 中奖记录 -->
+      <div class="records-section" id="recordsSection">
+        <div class="records-hd">
+          <span class="records-title">⚔ 本周得道者</span>
+          <button id="clearRecordsBtn" class="btn btn-ghost" style="display:none;font-size:11px;padding:3px 10px"
+            onclick="adminClearWinners()">清空记录</button>
+        </div>
+        <div id="recordsList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 设定抽签次数弹窗 -->
+  <div id="addCountOverlay" class="overlay" style="display:none" onclick="if(event.target===this)closeAddCountModal()">
+    <div class="add-count-modal">
+      <div class="add-count-hd">
+        <span class="add-count-title">设定抽签次数</span>
+        <button class="add-count-close" onclick="closeAddCountModal()" title="关闭">✕</button>
+      </div>
+      <div class="add-count-body">
+        <div class="form-group">
+          <label for="targetUserSelect">选择用户：</label>
+          <select id="targetUserSelect" class="form-select">
+            <option value="">请选择用户</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="addCountInput">设定次数：</label>
+          <input type="number" id="addCountInput" class="form-input" min="0" placeholder="请输入次数" />
+        </div>
+        <button class="btn btn-primary" style="width:100%" onclick="submitAddCount()">提交</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 签到浮窗 -->
+  <div id="signInFloat" class="sign-in-float" style="display:none">
+    <button id="signInBtn" class="sign-in-btn" onclick="doSignIn()">
+      <span class="sign-in-icon">📜</span>
+      <span class="sign-in-text">每日签到</span>
+    </button>
+  </div>
+
+  <!-- 签到成功弹窗 -->
+  <div id="signInSuccessOverlay" class="overlay" style="display:none">
+    <div class="sign-in-success-modal">
+      <div class="sign-in-success-content">
+        <div class="sign-in-success-icon">✨</div>
+        <div class="sign-in-success-title">签到成功</div>
+        <div class="sign-in-success-text">今日已获得1次抽签机会</div>
+        <div class="sign-in-success-count">累计签到 <span id="signInCountDisplay">0</span> 天</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 外部脚本 -->
+  <script src="js/app.js"></script>
+</body>
+
+</html>

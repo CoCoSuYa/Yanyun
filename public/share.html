@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>点击卡片直接入队</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+
+        #shareGuide {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-align: center;
+        }
+
+        .share-icon {
+            font-size: 80px;
+            margin-bottom: 20px;
+            animation: bounce 2s infinite;
+        }
+
+        @keyframes bounce {
+
+            0%,
+            100% {
+                transform: translateY(0);
+            }
+
+            50% {
+                transform: translateY(-20px);
+            }
+        }
+
+        .share-title {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .share-desc {
+            font-size: 16px;
+            opacity: 0.9;
+            line-height: 1.6;
+        }
+
+        .share-arrow {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 40px;
+            animation: shake 1s infinite;
+        }
+
+        @keyframes shake {
+
+            0%,
+            100% {
+                transform: rotate(0deg);
+            }
+
+            25% {
+                transform: rotate(-10deg);
+            }
+
+            75% {
+                transform: rotate(10deg);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="shareGuide">
+        <div class="share-arrow">👉</div>
+        <div class="share-icon">📱</div>
+        <div class="share-title">请点击右上角"..."</div>
+        <div class="share-desc">
+            选择"发送给朋友"<br>
+            将队伍邀请分享给好友
+        </div>
+    </div>
+
+    <script>
+        const params = new URLSearchParams(location.search);
+        const teamId = params.get('join');
+        const fromUserId = params.get('from');
+
+        if (!teamId || !fromUserId) {
+            location.href = '/';
+        } else {
+            const userStr = localStorage.getItem('yanyun_user');
+            const currentUser = userStr ? JSON.parse(userStr) : null;
+
+            if (!currentUser) {
+                location.href = `/?join=${teamId}`;
+            } else if (String(currentUser.id) === String(fromUserId)) {
+                document.getElementById('shareGuide').style.display = 'flex';
+            } else {
+                location.href = `/?join=${teamId}`;
+            }
+        }
+    </script>
+</body>
+
+</html>
