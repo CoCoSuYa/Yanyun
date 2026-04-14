@@ -13,6 +13,9 @@ const lotteryDao = require('./dao/lotteryDao');
 const noticeDao = require('./dao/noticeDao');
 const suggestionDao = require('./dao/suggestionDao');
 
+// 云库双写工具（队列 + 版本号管理）
+const { queueCloudSync, getQueueStatus } = require('./utils/cloud-sync');
+
 // 加载 .env.local（生产环境用系统环境变量，本地用文件）
 ; (function loadEnvLocal() {
   try {
@@ -131,15 +134,11 @@ function todayStr() {
 }
 
 
-// 异步同步到云数据库（不阻塞主流程）
+// 异步同步到云数据库（不阻塞主流程）- 已废弃，使用 queueCloudSync 替代
+// 保留此函数是为了兼容性，逐步迁移到新的队列机制
 function syncToCloud(collection, id, data) {
-  setImmediate(async () => {
-    try {
-      await db.collection(collection).where({ id }).update(data);
-    } catch (e) {
-      console.error(`[同步失败] ${collection}/${id}:`, e.message);
-    }
-  });
+  // 直接调用新的队列机制
+  queueCloudSync(collection, id, data, 'update');
 }
 
 async function loadData() {
