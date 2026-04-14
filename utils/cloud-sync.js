@@ -22,11 +22,65 @@ let processing = false;
 const MAX_CONCURRENT = 3;  // 最多 3 个并发
 const MAX_RETRIES = 3;      // 最多重试 3 次
 
+// camelCase → snake_case 字段映射（云库统一使用 snake_case，与 MySQL 一致）
+const CAMEL_TO_SNAKE = {
+  gameName: 'game_name',
+  guildName: 'guild_name',
+  mainStyle: 'main_style',
+  subStyle: 'sub_style',
+  passwordHash: 'password_hash',
+  avatarUrl: 'avatar_url',
+  isAdmin: 'is_admin',
+  lotteryCount: 'lottery_count',
+  signInCount: 'sign_in_count',
+  lastSignInDate: 'last_sign_in_date',
+  readNoticeIds: 'read_notice_ids',
+  readSuggestionIds: 'read_suggestion_ids',
+  contributionPoints: 'contribution_points',
+  consecutiveSignIns: 'consecutive_sign_ins',
+  juejinHighScore: 'juejin_high_score',
+  juejinCompleted: 'juejin_completed',
+  juejinLastPlayed: 'juejin_last_played',
+  openId: 'open_id',
+  mpQuota: 'mp_quota',
+  inviteLog: 'invite_log',
+  pendingInvites: 'pending_invites',
+  leaderId: 'leader_id',
+  leaderOpenId: 'leader_open_id',
+  fullNotified: 'full_notified',
+  remindSent: 'remind_sent',
+  maxSize: 'max_size',
+  createdAt: 'created_at',
+  updatedAt: 'updated_at',
+  lastClear: 'last_clear',
+  bannerClearedAt: 'banner_cleared_at',
+};
+
+/**
+ * 将 camelCase 键名转为 snake_case
+ * 内部字段（_syncVersion, _dataSource）和 members 数组内的字段保持不变
+ */
+function toSnakeCase(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+  const result = {};
+  for (const [key, value] of Object.entries(obj)) {
+    // 跳过内部同步字段和 _id
+    if (key.startsWith('_')) {
+      result[key] = value;
+      continue;
+    }
+    const snakeKey = CAMEL_TO_SNAKE[key] || key;
+    // 如果值本身就是 snake_case 的（如从 MySQL 直接取出的数据），直接透传
+    result[snakeKey] = value;
+  }
+  return result;
+}
+
 /**
  * 将记录加入双写队列
  * @param {string} collection - 集合名（users/teams/notices/suggestions/lottery）
  * @param {string} recordId - 记录 ID
- * @param {object} data - 要同步的数据（camelCase 格式）
+ * @param {object} data - 要同步的数据（支持 camelCase 或 snake_case，会自动转 snake_case）
  * @param {string} operation - 操作类型：'create' | 'update' | 'delete'
  */
 function queueCloudSync(collection, recordId, data, operation = 'update') {
@@ -35,10 +89,13 @@ function queueCloudSync(collection, recordId, data, operation = 'update') {
     return;
   }
 
+  // 统一转换为 snake_case
+  const snakeData = toSnakeCase(data);
+
   syncQueue.push({
     collection,
     recordId,
-    data,
+    data: snakeData,
     operation,
     retries: 0,
     addedAt: Date.now()
@@ -60,7 +117,7 @@ async function processQueue() {
   while (syncQueue.length > 0) {
     // 取出最多 MAX_CONCURRENT 个任务并发执行
     const batch = syncQueue.splice(0, MAX_CONCURRENT);
-    const tasks = batch.map(task => syncToCloud(task));
+    const tasks = batch.map(task => doSync(task));
     
     await Promise.allSettled(tasks);
     
@@ -74,7 +131,7 @@ async function processQueue() {
 /**
  * 执行单个云库同步任务
  */
-async function syncToCloud(task) {
+async function doSync(task) {
   const { collection, recordId, data, operation, retries } = task;
 
   try {
@@ -93,12 +150,12 @@ async function syncToCloud(task) {
       [collection, recordId, newVersion, newVersion]
     );
 
-    // 2. 同步到云库（带版本号和来源标记）
+    // 2. 同步到云库（带版本号和来源标记，字段名统一 snake_case）
     const cloudData = {
       ...data,
       _syncVersion: newVersion,
       _dataSource: 'mysql',
-      updatedAt: new Date().toISOString()
+      updated_at: new Date().toISOString()
     };
 
     if (operation === 'delete') {
