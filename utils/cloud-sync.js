@@ -56,8 +56,15 @@ const CAMEL_TO_SNAKE = {
   bannerClearedAt: 'banner_cleared_at',
 };
 
+// 需要序列化为 JSON 字符串的字段（云库不支持含特殊字符的嵌套键名如 "2026-04-14"）
+const JSON_STRING_FIELDS = new Set([
+  'mp_quota', 'mpQuota',       // { invite, full, remind }
+  'invite_log', 'inviteLog',   // { "2026-04-14": count }
+  'pending_invites', 'pendingInvites', // [{...}, {...}]
+]);
+
 /**
- * 将 camelCase 键名转为 snake_case
+ * 将 camelCase 键名转为 snake_case，JSON 字段自动序列化为字符串
  * 内部字段（_syncVersion, _dataSource）和 members 数组内的字段保持不变
  */
 function toSnakeCase(obj) {
@@ -70,8 +77,12 @@ function toSnakeCase(obj) {
       continue;
     }
     const snakeKey = CAMEL_TO_SNAKE[key] || key;
-    // 如果值本身就是 snake_case 的（如从 MySQL 直接取出的数据），直接透传
-    result[snakeKey] = value;
+    // JSON 字段序列化为字符串存储（避免云库字段名含 "-" 等非法字符）
+    if (JSON_STRING_FIELDS.has(snakeKey) && typeof value === 'object' && value !== null) {
+      result[snakeKey] = JSON.stringify(value);
+    } else {
+      result[snakeKey] = value;
+    }
   }
   return result;
 }
