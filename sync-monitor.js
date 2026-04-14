@@ -190,6 +190,42 @@ async function upsertRecord(conn, tableName, cloudDoc) {
     );
   }
   
+  // 日期类型字段映射（MySQL 列名 → 类型）
+  // date 类型只存 YYYY-MM-DD，timestamp/datetime 存 YYYY-MM-DD HH:MM:SS
+  const dateTypeFields = {
+    // MySQL 列名 → 类型
+    'last_sign_in_date': 'date',       // date 类型，只需要 YYYY-MM-DD
+    'created_at': 'timestamp',
+    'updated_at': 'timestamp',
+  };
+  
+  // 将云库日期值转为 MySQL 格式
+  function toMySQLDate(val, mysqlType) {
+    if (val === null || val === undefined) return null;
+    
+    let dateStr = '';
+    if (val instanceof Date) {
+      dateStr = val.toISOString();
+    } else if (typeof val === 'string') {
+      dateStr = val;
+    } else if (typeof val === 'number') {
+      // Unix timestamp (毫秒)
+      dateStr = new Date(val).toISOString();
+    } else {
+      return val;
+    }
+    
+    if (mysqlType === 'date') {
+      // date 类型只需要 YYYY-MM-DD
+      const match = dateStr.match(/^(\d{4}-\d{2}-\d{2})/);
+      return match ? match[1] : dateStr;
+    } else {
+      // timestamp/datetime: YYYY-MM-DD HH:MM:SS
+      const match = dateStr.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})/);
+      return match ? `${match[1]} ${match[2]}` : dateStr;
+    }
+  }
+  
   // 转换字段名并准备数据
   const mysqlFields = [];
   const values = [];
@@ -203,6 +239,9 @@ async function upsertRecord(conn, tableName, cloudDoc) {
     // 处理特殊类型
     if (value === null || value === undefined) {
       values.push(null);
+    } else if (dateTypeFields[mysqlField]) {
+      // 日期字段：按 MySQL 列类型转格式
+      values.push(toMySQLDate(value, dateTypeFields[mysqlField]));
     } else if (Array.isArray(value)) {
       // 清洗数组，过滤无效值
       const cleanedArray = cleanArray(value);
