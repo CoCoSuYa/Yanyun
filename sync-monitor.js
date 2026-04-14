@@ -139,20 +139,70 @@ async function checkAndSync(tableName, cloudDoc) {
 // 动态 UPSERT（自动适配不同表的字段）
 async function upsertRecord(conn, tableName, cloudDoc) {
   // 过滤掉云库内部字段和同步元数据字段
-  const skipFields = new Set(['_id', '_openid', '_syncVersion', '_dataSource']);
-  const fields = Object.keys(cloudDoc).filter(k => !skipFields.has(k));
+  const skipFields = new Set(['_id', '_openid', '_syncVersion', '_dataSource', 'updatedAt']);
   
-  if (fields.length === 0) {
+  // 字段名映射：云库 camelCase → MySQL snake_case
+  const fieldMap = {
+    // users 表
+    gameName: 'game_name',
+    guildName: 'guild_name',
+    mainStyle: 'main_style',
+    subStyle: 'sub_style',
+    passwordHash: 'password_hash',
+    avatarUrl: 'avatar_url',
+    openId: 'open_id',
+    mpQuota: 'mp_quota',
+    inviteLog: 'invite_log',
+    pendingInvites: 'pending_invites',
+    lotteryCount: 'lottery_count',
+    signInCount: 'sign_in_count',
+    lastSignInDate: 'last_sign_in_date',
+    consecutiveSignIns: 'consecutive_sign_ins',
+    readNoticeIds: 'read_notice_ids',
+    readSuggestionIds: 'read_suggestion_ids',
+    contributionPoints: 'contribution_points',
+    createdAt: 'created_at',
+    
+    // teams 表
+    leaderId: 'leader_id',
+    maxSize: 'max_size',
+    fullNotified: 'full_notified',
+    remindSent: 'remind_sent',
+    
+    // suggestions 表
+    userId: 'user_id'
+  };
+  
+  // 转换字段名并准备数据
+  const mysqlFields = [];
+  const values = [];
+  
+  for (const [cloudField, value] of Object.entries(cloudDoc)) {
+    if (skipFields.has(cloudField)) continue;
+    
+    const mysqlField = fieldMap[cloudField] || cloudField;
+    mysqlFields.push(mysqlField);
+    
+    // 处理特殊类型
+    if (typeof value === 'object' && value !== null) {
+      values.push(JSON.stringify(value));
+    } else if (typeof value === 'boolean') {
+      values.push(value ? 1 : 0);
+    } else {
+      values.push(value);
+    }
+  }
+  
+  if (mysqlFields.length === 0) {
     console.warn(`[${tableName}/${cloudDoc._id}] 无有效字段，跳过`);
     return;
   }
   
-  const values = fields.map(f => cloudDoc[f]);
-  const placeholders = fields.map(() => '?').join(', ');
-  const updates = fields.map(f => `${f} = VALUES(${f})`).join(', ');
+  const placeholders = mysqlFields.map(() => '?').join(', ');
+  const updates = mysqlFields.map(f => `${f} = VALUES(${f})`).join(', ');
   
   await conn.query(
-    `INSERT INTO ${tableName} (id, ${fields.join(', ')})
+    `INSERT INTO ${tableName} (id, ${mysqlFields.join(', ')})
      VALUES (?, ${placeholders})
      ON DUPLICATE KEY UPDATE ${updates}`,
     [cloudDoc._id, ...values]
