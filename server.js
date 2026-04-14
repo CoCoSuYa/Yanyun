@@ -171,11 +171,15 @@ async function loadData() {
       readNoticeIds: typeof u.read_notice_ids === 'string' ? JSON.parse(u.read_notice_ids) : (u.read_notice_ids || []),
       readSuggestionIds: typeof u.read_suggestion_ids === 'string' ? JSON.parse(u.read_suggestion_ids) : (u.read_suggestion_ids || []),
       juejinHighScore: u.juejin_high_score,
-      juejinCompleted: u.juejin_completed === 1,
+      juejinCompleted: !!u.juejin_completed,
       achievements: typeof u.achievements === 'string' ? JSON.parse(u.achievements) : (u.achievements || []),
       openId: u.open_id,
       contributionPoints: u.contribution_points,
-      consecutiveSignIns: u.consecutive_sign_ins
+      consecutiveSignIns: u.consecutive_sign_ins,
+      mpQuota: typeof u.mp_quota === 'string' ? JSON.parse(u.mp_quota) : (u.mp_quota || { invite: 0, full: 0, remind: 0 }),
+      inviteLog: typeof u.invite_log === 'string' ? JSON.parse(u.invite_log) : (u.invite_log || {}),
+      pendingInvites: typeof u.pending_invites === 'string' ? JSON.parse(u.pending_invites) : (u.pending_invites || []),
+      juejinLastPlayed: u.juejin_last_played || null
     }));
 
     // 转换notices数据
@@ -198,30 +202,39 @@ async function loadData() {
     // 加载teams（从MySQL）
     const t3 = Date.now();
     const mysqlTeams = await teamDao.getAllTeams();
-    teams = mysqlTeams.map(t => ({
-      id: t.id,
-      type: t.type,
-      purpose: t.purpose,
-      date: t.date,
-      time: t.time,
-      leaderId: t.leader_id,
-      members: typeof t.members === 'string' ? JSON.parse(t.members) : (t.members || []),
-      maxSize: t.max_size || 10,
-      fullNotified: t.full_notified || false,
-      remindSent: t.remind_sent || false,
-      createdAt: t.created_at,
-      updatedAt: t.updated_at
-    }));
+    teams = mysqlTeams.map(t => {
+      let timeValue = t.time;
+      // 兼容旧数据：如果 time 是 HH:MM:SS 格式，结合 date 补全为 ISO 字符串
+      if (timeValue && /^\d{2}:\d{2}:\d{2}$/.test(timeValue) && t.date) {
+        timeValue = `${t.date}T${timeValue}.000Z`;
+      }
+      return {
+        id: t.id,
+        type: t.type,
+        purpose: t.purpose,
+        date: t.date,
+        time: timeValue,
+        leaderId: t.leader_id,
+        members: typeof t.members === 'string' ? JSON.parse(t.members) : (t.members || []),
+        maxSize: t.max_size || 10,
+        fullNotified: !!t.full_notified,
+        remindSent: !!t.remind_sent,
+        createdAt: t.created_at,
+        updatedAt: t.updated_at
+      };
+    });
     console.log(`[性能] 加载teams耗时: ${Date.now() - t3}ms`);
 
     lottery = mysqlLottery ? {
       slots: typeof mysqlLottery.slots === 'string' ? JSON.parse(mysqlLottery.slots) : (mysqlLottery.slots || []),
       winners: typeof mysqlLottery.winners === 'string' ? JSON.parse(mysqlLottery.winners) : (mysqlLottery.winners || []),
-      bannerClearedAt: mysqlLottery.banner_cleared_at
+      bannerClearedAt: mysqlLottery.banner_cleared_at,
+      lastClear: mysqlLottery.last_clear || null
     } : {
       slots: Array(16).fill({ text: '谢谢参与', quantity: -1, isWinning: false }),
       winners: [],
-      bannerClearedAt: new Date(0).toISOString()
+      bannerClearedAt: new Date(0).toISOString(),
+      lastClear: null
     };
 
     console.log(`✅ 已从MySQL加载 ${users.length} 名游侠, ${notices.length} 条公告, ${suggestions.length} 条建议`);
@@ -332,8 +345,7 @@ app.post('/api/users', async (req, res) => {
     readNoticeIds: [],
     readSuggestionIds: [],
     contributionPoints: 0,
-    consecutiveSignIns: 0,
-    _createdAt: db.serverDate()
+    consecutiveSignIns: 0
   };
 
   try {
@@ -346,7 +358,14 @@ app.post('/api/users', async (req, res) => {
       sub_style: user.subStyle,
       password_hash: user.passwordHash,
       avatar_url: '',
-      open_id: ''
+      open_id: '',
+      is_admin: false,
+      lottery_count: 1,
+      sign_in_count: 0,
+      contribution_points: 0,
+      consecutive_sign_ins: 0,
+      juejin_high_score: 0,
+      juejin_completed: false
     });
 
     // 更新内存
@@ -397,16 +416,24 @@ app.put('/api/users/:id', async (req, res) => {
 
   // 更新云端 Users 表
   try {
-    await userDao.updateUser(user.id, {
+    const updateData = {
       game_name: user.gameName,
       main_style: user.mainStyle,
       sub_style: user.subStyle
-    });
-    syncToCloud('users', user.id, {
+    };
+    if (newPassword) {
+      updateData.password_hash = user.passwordHash;
+    }
+    await userDao.updateUser(user.id, updateData);
+    const cloudUpdateData = {
       gameName: user.gameName,
       mainStyle: user.mainStyle,
       subStyle: user.subStyle
-    });
+    };
+    if (newPassword) {
+      cloudUpdateData.passwordHash = user.passwordHash;
+    }
+    syncToCloud('users', user.id, cloudUpdateData);
 
     // 级联更新 teams（内存与云端）
     const affectedTeams = [];
@@ -628,8 +655,7 @@ app.post('/api/teams', async (req, res) => {
     }],
     maxSize,
     fullNotified: false,
-    remindSent: false,
-    _createdAt: db.serverDate()
+    remindSent: false
   };
 
   try {
@@ -755,7 +781,8 @@ app.post('/api/teams/:id/leave', async (req, res) => {
     }
 
     await teamDao.updateTeam(req.params.id, {
-      members: JSON.stringify(team.members)
+      members: JSON.stringify(team.members),
+      leader_id: team.leaderId
     });
     syncToCloud('teams', req.params.id, {
       members: team.members,
@@ -915,7 +942,8 @@ async function checkWeeklyReset() {
       // 更新MySQL
       await lotteryDao.updateLottery({
         winners: JSON.stringify(lottery.winners),
-        banner_cleared_at: lottery.lastClear
+        banner_cleared_at: lottery.lastClear,
+        last_clear: lottery.lastClear
       });
 
       // 异步同步到云数据库
@@ -1208,7 +1236,7 @@ app.post('/api/mp/invite', async (req, res) => {
     teamTime: team.time,
     leaderName: (users.find(u => u.id === team.leaderId) || {}).gameName || '',
     memberCount: (team.members || []).length,
-    maxMembers: team.maxMembers || 5,
+    maxMembers: team.maxSize || 5,
     createdAt: new Date().toISOString(),
   };
   target.pendingInvites.push(inviteRecord);
@@ -1459,7 +1487,8 @@ app.post('/api/lottery/clear-winners', async (req, res) => {
     // 更新MySQL
     await lotteryDao.updateLottery({
       winners: JSON.stringify(lottery.winners),
-      banner_cleared_at: lottery.bannerClearedAt
+      banner_cleared_at: lottery.bannerClearedAt,
+      last_clear: lottery.lastClear
     });
 
     // 异步同步到云数据库
@@ -1906,7 +1935,8 @@ app.post('/api/admin/fix-avatars', async (req, res) => {
   if (!isAdminUser(admin)) return res.status(403).json({ error: '无权限' });
 
   try {
-    const result = await db.query(
+    const mysqlDb = require('./db/mysql');
+    const result = await mysqlDb.query(
       `UPDATE users SET avatar_url = REPLACE(REPLACE(REPLACE(avatar_url, ' ', ''), '\\n', ''), '\\r', '')
        WHERE avatar_url LIKE '% %' OR avatar_url LIKE '%\\n%' OR avatar_url LIKE '%\\r%'`
     );
@@ -1923,18 +1953,32 @@ app.post('/api/admin/fix-avatars', async (req, res) => {
       avatarUrl: u.avatar_url,
       openId: u.open_id,
       isAdmin: !!u.is_admin,
+      signInCount: u.sign_in_count,
+      lastSignInDate: u.last_sign_in_date,
       lotteryCount: u.lottery_count || 0,
+      readNoticeIds: typeof u.read_notice_ids === 'string' ? JSON.parse(u.read_notice_ids) : (u.read_notice_ids || []),
+      readSuggestionIds: typeof u.read_suggestion_ids === 'string' ? JSON.parse(u.read_suggestion_ids) : (u.read_suggestion_ids || []),
       contributionPoints: u.contribution_points || 0,
+      consecutiveSignIns: u.consecutive_sign_ins || 0,
       juejinHighScore: u.juejin_high_score || 0,
-      readSuggestionIds: typeof u.read_suggestion_ids === 'string' ? JSON.parse(u.read_suggestion_ids) : (u.read_suggestion_ids || [])
+      juejinCompleted: !!u.juejin_completed,
+      achievements: typeof u.achievements === 'string' ? JSON.parse(u.achievements) : (u.achievements || []),
+      mpQuota: typeof u.mp_quota === 'string' ? JSON.parse(u.mp_quota) : (u.mp_quota || { invite: 0, full: 0, remind: 0 }),
+      inviteLog: typeof u.invite_log === 'string' ? JSON.parse(u.invite_log) : (u.invite_log || {}),
+      pendingInvites: typeof u.pending_invites === 'string' ? JSON.parse(u.pending_invites) : (u.pending_invites || []),
+      juejinLastPlayed: u.juejin_last_played || null
     }));
 
     // 异步同步到云数据库
     setImmediate(async () => {
       for (const user of users) {
-        await db.collection('users').doc(user.id).update({
-          data: { avatarUrl: user.avatarUrl }
-        });
+        try {
+          await db.collection('users').doc(user.id).update({
+            avatarUrl: user.avatarUrl
+          });
+        } catch (e) {
+          console.error(`[同步失败] fix-avatars users/${user.id}:`, e.message);
+        }
       }
     });
 

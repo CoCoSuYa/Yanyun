@@ -25,6 +25,11 @@ CREATE TABLE IF NOT EXISTS users (
   achievements JSON,
   juejin_completed BOOLEAN DEFAULT FALSE,
   open_id VARCHAR(100),
+  is_admin BOOLEAN DEFAULT FALSE,
+  mp_quota JSON,
+  invite_log JSON,
+  pending_invites JSON,
+  juejin_last_played TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_game_name (game_name),
@@ -56,6 +61,7 @@ CREATE TABLE IF NOT EXISTS lottery (
   slots JSON NOT NULL,
   winners JSON NOT NULL,
   banner_cleared_at TIMESTAMP,
+  last_clear TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
