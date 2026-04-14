@@ -88,3 +88,24 @@ export function toast(msg) {
 }
 
 export function showGErr(el, msg) { el.textContent = msg; el.style.display = 'block'; }
+
+// 按钮 loading 状态控制（用于登录/注册等表单按钮）
+const _loadingBtns = new Map();
+export function setButtonLoading(idOrEl, loading) {
+  const el = (typeof idOrEl === 'string') ? document.getElementById(idOrEl) : idOrEl;
+  if (!el) return;
+  if (loading) {
+    _loadingBtns.set(el.id || el, { text: el.textContent, disabled: el.disabled });
+    el.disabled = true;
+    el.textContent = '⏳ 提交中...';
+    el.style.opacity = '0.7';
+    el.style.cursor = 'not-allowed';
+  } else {
+    const prev = _loadingBtns.get(el.id || el);
+    el.disabled = prev ? prev.disabled : false;
+    el.textContent = prev ? prev.text : el.textContent;
+    el.style.opacity = '';
+    el.style.cursor = '';
+    _loadingBtns.delete(el.id || el);
+  }
+}
