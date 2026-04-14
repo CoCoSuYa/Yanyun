@@ -122,6 +122,7 @@ export function handleCardClick(e, team) {
     if (isLeader) {
       actions.push({ label: '修改时间', fn: () => showEditTimeModal(fresh) });
     }
+    actions.push({ label: '分享队伍', fn: () => copyShareLink(fresh) });
     actions.push({ label: '辞队而去', danger: true, fn: () => doLeave(fresh) });
   } else {
     if (isFull) { toast('队伍已满员，暂难容纳更多游侠'); return; }
@@ -134,8 +135,24 @@ export function handleCardClick(e, team) {
     actions.push({ label: '散伙议事', danger: true, fn: () => doDissolve(fresh) });
   }
 
+  // 非队长也可以分享（通过复制链接）
+  if (!isLeader && isMine && !actions.find(a => a.label === '分享队伍')) {
+    actions.splice(actions.length - 1, 0, { label: '分享队伍', fn: () => copyShareLink(fresh) });
+  }
+
   if (!actions.length) return;
   showPopup(e, actions);
+}
+
+// 复制队伍分享链接
+function copyShareLink(team) {
+  const url = `${location.origin}${location.pathname}?join=${team.id}`;
+  navigator.clipboard.writeText(url).then(() => {
+    toast('链接已复制，可发送给好友');
+  }).catch(() => {
+    // fallback: 显示链接让用户手动复制
+    openModal('复制邀请链接', `<div style="word-break:break-all;font-size:13px;color:var(--text-dim);padding:8px 0">${esc(url)}</div><div class="fbtns"><button class="btn btn-ghost" onclick="closeModal()">关闭</button></div>`);
+  });
 }
 
 export function showKickPopup(e, team, uid) {

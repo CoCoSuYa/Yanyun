@@ -35,7 +35,7 @@ import {
 import {
   showMsgBox, hideMsgBox, renderMsgTabs, switchMsgTab as _switchMsgTab,
   loadNotices, loadSuggestions, submitSuggestion, postNotice,
-  deleteMsg, openMsgDetail, markMsgAsRead,
+  deleteMsg, openMsgDetail, markMsgAsRead, markAsRead,
   checkUnreadMessages, showLatestUnreadNotice,
   msgUnreadState, updateMsgBadge, clearCachedNotices, setCachedNotices,
   setAuthFn as msgSetAuthFn
@@ -107,7 +107,9 @@ window.submitSuggestion = submitSuggestion;
 window.postNotice = postNotice;
 window.deleteMsg = deleteMsg;
 window.openMsgDetail = openMsgDetail;
-window.markMsgAsRead = markMsgAsRead;
+window.markMsgAsRead = markMsgAsRead;  // 本地UI状态更新
+window.markAsRead = markAsRead;  // API已读标记（HTML onclick 用）
+window.handleUserItemClick = handleUserItemClick;
 
 // ui.js 的 closeModal 和 toast 也挂载（HTML 内联 onclick 使用）
 window.closeModal = closeModal;
