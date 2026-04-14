@@ -60,12 +60,13 @@ function createConcurrencyLimiter(limit) {
 // 同步单个集合
 async function syncCollection(collectionName) {
   try {
-    // 查询云库最近 30 秒内更新的记录（避免遗漏）
-    const cutoff = new Date(Date.now() - 30000);
+    // 查询云库中 _dataSource 为 'cloud' 的记录（即小程序端产生的变更）
+    // 这些记录需要同步回 MySQL
     const res = await db.collection(collectionName)
       .where({
-        updated_at: db.command.gte(cutoff)
+        _dataSource: 'cloud'
       })
+      .limit(100)
       .get();
     
     if (res.data.length === 0) return;
