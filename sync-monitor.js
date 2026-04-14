@@ -139,44 +139,8 @@ async function checkAndSync(tableName, cloudDoc) {
 // 动态 UPSERT（自动适配不同表的字段）
 async function upsertRecord(conn, tableName, cloudDoc) {
   // 过滤掉云库内部字段和同步元数据字段
-  // 注意：过滤掉 'id' 字段，因为我们用 _id 作为主键
+  // 云库数据统一使用 snake_case 格式（与 MySQL 一致），直接透传即可
   const skipFields = new Set(['_id', '_openid', '_syncVersion', '_dataSource', 'updated_at', '_createdAt', 'id']);
-  
-  // 字段名映射：云库 camelCase → MySQL snake_case
-  const fieldMap = {
-    // users 表
-    gameName: 'game_name',
-    guildName: 'guild_name',
-    mainStyle: 'main_style',
-    subStyle: 'sub_style',
-    passwordHash: 'password_hash',
-    avatarUrl: 'avatar_url',
-    openId: 'open_id',
-    mpQuota: 'mp_quota',
-    inviteLog: 'invite_log',
-    pendingInvites: 'pending_invites',
-    lotteryCount: 'lottery_count',
-    signInCount: 'sign_in_count',
-    lastSignInDate: 'last_sign_in_date',
-    consecutiveSignIns: 'consecutive_sign_ins',
-    readNoticeIds: 'read_notice_ids',
-    readSuggestionIds: 'read_suggestion_ids',
-    contributionPoints: 'contribution_points',
-    createdAt: 'created_at',
-    juejinHighScore: 'juejin_high_score',
-    juejinCompleted: 'juejin_completed',
-    juejinLastPlayed: 'juejin_last_played',
-    achievements: 'achievements',
-    
-    // teams 表
-    leaderId: 'leader_id',
-    maxSize: 'max_size',
-    fullNotified: 'full_notified',
-    remindSent: 'remind_sent',
-    
-    // suggestions 表
-    userId: 'user_id'
-  };
   
   // 数据清洗函数：过滤数组中的无效值
   function cleanArray(arr) {
@@ -226,22 +190,21 @@ async function upsertRecord(conn, tableName, cloudDoc) {
     }
   }
   
-  // 转换字段名并准备数据
+  // 准备数据（云库 snake_case 直接映射到 MySQL snake_case）
   const mysqlFields = [];
   const values = [];
   
-  for (const [cloudField, value] of Object.entries(cloudDoc)) {
-    if (skipFields.has(cloudField)) continue;
+  for (const [field, value] of Object.entries(cloudDoc)) {
+    if (skipFields.has(field)) continue;
     
-    const mysqlField = fieldMap[cloudField] || cloudField;
-    mysqlFields.push(mysqlField);
+    mysqlFields.push(field);
     
     // 处理特殊类型
     if (value === null || value === undefined) {
       values.push(null);
-    } else if (dateTypeFields[mysqlField]) {
+    } else if (dateTypeFields[field]) {
       // 日期字段：按 MySQL 列类型转格式
-      values.push(toMySQLDate(value, dateTypeFields[mysqlField]));
+      values.push(toMySQLDate(value, dateTypeFields[field]));
     } else if (Array.isArray(value)) {
       // 清洗数组，过滤无效值
       const cleanedArray = cleanArray(value);

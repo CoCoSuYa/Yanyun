@@ -168,16 +168,23 @@ async function doSync(task) {
       });
       console.log(`[云同步] ✓ ${collection}/${recordId} 创建成功 (v${newVersion})`);
     } else {
-      // update：先尝试 update，失败则 add（幂等）
-      try {
-        await cloudDb.collection(collection).doc(recordId).update(cloudData);
+      // update：先尝试 update，检查是否实际更新了文档
+      const updateResult = await cloudDb.collection(collection).doc(recordId).update(cloudData);
+      if (updateResult.updated > 0) {
         console.log(`[云同步] ✓ ${collection}/${recordId} 更新成功 (v${newVersion})`);
-      } catch (e) {
-        if (e.code === 'DATABASE_DOCUMENT_NOT_EXIST') {
+      } else {
+        // 文档不存在，执行 add（补录）
+        try {
           await cloudDb.collection(collection).add({ _id: recordId, ...cloudData });
           console.log(`[云同步] ✓ ${collection}/${recordId} 创建成功（补录） (v${newVersion})`);
-        } else {
-          throw e;
+        } catch (addErr) {
+          // add 也可能因 _id 冲突失败（并发场景），此时再试一次 update
+          if (addErr.code === 'DATABASE_DOCUMENT_ALREADY_EXIST') {
+            await cloudDb.collection(collection).doc(recordId).update(cloudData);
+            console.log(`[云同步] ✓ ${collection}/${recordId} 更新成功（并发重试） (v${newVersion})`);
+          } else {
+            throw addErr;
+          }
         }
       }
     }
