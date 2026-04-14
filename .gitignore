@@ -25,4 +25,8 @@ Thumbs.db
 tmp/
 temp/
 
+# User uploads (runtime data)
+public/uploads/avatars/
 
+# Music files (large binary)
+public/music/
