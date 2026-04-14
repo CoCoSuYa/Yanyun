@@ -11,20 +11,23 @@ import {
   setSelectDateFn, setHandleCardClickFn, setShowKickPopupFn,
   setCheckPendingJoinFn, setRenderLotteryRecordsFn
 } from './render.js';
-import { selectDate, toggleSidebar, handleMyBadgeClick,
+import {
+  selectDate, toggleSidebar, handleMyBadgeClick,
   handleCardClick, showKickPopup, checkPendingJoin,
   doJoin, doLeave, doKick, doDissolve, applyTeamResult,
   handleUserItemClick, setupDateSwipe, doLogout,
   setEditModalFn as teamSetEditModalFn,
-  setShowEditTimeModalFn as teamSetShowEditTimeModalFn
+  setShowEditTimeModalFn as teamSetShowEditTimeModalFn,
+  setAuthFns as teamSetAuthFns
 } from './team.js';
-import { handleCreateTeam, submitCreate } from './team-create.js';
+import { handleCreateTeam, submitCreate, setAuthFn as createSetAuthFn } from './team-create.js';
 import { showIdentityModal, switchAuthTab, submitLogin, submitRegister,
   showEditModal, submitEdit, showEditTimeModal, setOnLoginCallbacks } from './auth.js';
 import {
   LOT, initLottery, handleLotteryEntryClick, openLottery, closeLottery,
   handleSpin, updateSpinButton, renderSlotRing, redrawWheel, renderLotteryRecords,
-  adminClearBanner, adminClearWinners, submitAddCount, updateWinnerBanner
+  adminClearBanner, adminClearWinners, submitAddCount, updateWinnerBanner,
+  openAddCountModal, closeAddCountModal
 } from './lottery.js';
 import {
   initSignIn, initSignInFromUserData, updateSignInFloat, doSignIn
@@ -34,10 +37,12 @@ import {
   loadNotices, loadSuggestions, submitSuggestion, postNotice,
   deleteMsg, openMsgDetail, markMsgAsRead,
   checkUnreadMessages, showLatestUnreadNotice,
-  msgUnreadState, updateMsgBadge, clearCachedNotices, setCachedNotices
+  msgUnreadState, updateMsgBadge, clearCachedNotices, setCachedNotices,
+  setAuthFn as msgSetAuthFn
 } from './message-box.js';
 import { toggleBgm, nextBgm, initBgm } from './bgm.js';
 import { initLazyLoading, setupImageRetry } from './images.js';
+import { closeModal, toast as uiToast } from './ui.js';
 
 // ---- 绑定模块间的依赖关系（避免循环 import）----
 
@@ -49,11 +54,9 @@ setCheckPendingJoinFn(checkPendingJoin);
 setRenderLotteryRecordsFn(renderLotteryRecords);
 
 // team.js 需要 auth 模块的弹窗函数
-import { setAuthFns as teamSetAuthFns } from './team.js';
 teamSetAuthFns({ showIdentityModal });
 
 // team-create.js 需要 auth 模块
-import { setAuthFn as createSetAuthFn } from './team-create.js';
 createSetAuthFn(showIdentityModal);
 
 // auth.js 需要登录后的回调
@@ -65,7 +68,6 @@ setOnLoginCallbacks({
 });
 
 // message-box.js 需要 auth 模块
-import { setAuthFn as msgSetAuthFn } from './message-box.js';
 msgSetAuthFn(showIdentityModal);
 
 // websocket.js 需要的渲染函数（通过全局引用避免循环）
@@ -108,7 +110,6 @@ window.openMsgDetail = openMsgDetail;
 window.markMsgAsRead = markMsgAsRead;
 
 // ui.js 的 closeModal 和 toast 也挂载（HTML 内联 onclick 使用）
-import { closeModal, toast as uiToast } from './ui.js';
 window.closeModal = closeModal;
 window.toast = uiToast;
 
