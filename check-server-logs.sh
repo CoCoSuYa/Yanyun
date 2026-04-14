@@ -1,29 +1,20 @@
-#!/usr/bin/expect -f
-set timeout 30
+#!/bin/bash
+# 查看服务器运行日志
+# 用法: ./check-server-logs.sh [行数]
 
-set host "43.251.102.69"
-set user "root"
-set password "Xiaxue961124"
+set -e
 
-spawn ssh ${user}@${host}
-expect {
-    "password:" {
-        send "${password}\r"
-    }
-    "yes/no" {
-        send "yes\r"
-        expect "password:"
-        send "${password}\r"
-    }
-}
+LINES=${1:-100}
 
-expect "#"
-send "cd /opt/yanyun\r"
+if [ ! -f ".env.local" ]; then
+    echo "❌ 错误: .env.local 文件不存在"
+    exit 1
+fi
 
-expect "#"
-send "pm2 logs yanyun --lines 100 --nostream\r"
+SERVER_IP=$(grep "^SERVER2_IP=" .env.local | cut -d'=' -f2 | tr -d '\r')
+SERVER_USER=$(grep "^SERVER2_USER=" .env.local | cut -d'=' -f2 | tr -d '\r')
 
-expect "#"
-send "exit\r"
+echo "📋 查看最近 ${LINES} 行运行日志 ($SERVER_IP)..."
+echo ""
 
-expect eof
+ssh "$SERVER_USER@$SERVER_IP" "cd /opt/yanyun && pm2 logs yanyun --lines ${LINES} --nostream"
