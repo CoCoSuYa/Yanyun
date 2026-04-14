@@ -3,6 +3,7 @@ const { WebSocketServer } = require('ws');
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
 const http = require('http');
+const https = require('https');
 const path = require('path');
 const fs = require('fs');
 
@@ -129,8 +130,7 @@ const ACHIEVEMENTS = [
 
 function todayStr() {
   const d = new Date();
-  return `${d.getFullYear()} - ${String(d.getMonth() + 1).padStart(2, '0')
-    }-${String(d.getDate()).padStart(2, '0')}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 
