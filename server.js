@@ -1732,13 +1732,13 @@ app.post('/api/notices', async (req, res) => {
 
     const title = `${yearStr}年${monthStr}月${dayStr}日`;
 
-    // 写入MySQL
+    // 写入MySQL（created_at 转换为 MySQL DATETIME 格式）
     await noticeDao.createNotice({
       id: noticeId,
       title,
       content,
       author_id: adminId,
-      created_at: createdAt
+      created_at: createdAt.slice(0, 19).replace('T', ' ')
     });
 
     // 更新内存
@@ -1816,12 +1816,12 @@ app.post('/api/suggestions', async (req, res) => {
     const suggestionId = uuidv4();
     const createdAt = new Date().toISOString();
 
-    // 写入MySQL
+    // 写入MySQL（created_at 转换为 MySQL DATETIME 格式）
     await suggestionDao.createSuggestion({
       id: suggestionId,
       content,
       author_id: userId,
-      created_at: createdAt
+      created_at: createdAt.slice(0, 19).replace('T', ' ')
     });
 
     // 更新内存
@@ -2033,7 +2033,7 @@ app.post('/api/games/juejin/score', async (req, res) => {
   try {
     await userDao.updateUser(userId, {
       juejin_high_score: updated ? score : user.juejinHighScore,
-      juejin_last_played: new Date().toISOString(),
+      juejin_last_played: new Date().toISOString().slice(0, 19).replace('T', ' '),
       contribution_points: user.contributionPoints
     });
     syncToCloud('users', userId, {
