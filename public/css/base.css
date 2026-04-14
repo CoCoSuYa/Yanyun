@@ -1,0 +1,46 @@
+/* ===== CSS Variables & Base Reset ===== */
+:root {
+  --bg: #120b04;
+  --bg-card: #1e1208;
+  --bg-card2: #261808;
+  --bg-input: rgba(0, 0, 0, 0.45);
+  --gold: #c8a45e;
+  --gold-light: #e8c878;
+  --gold-dim: #8a6830;
+  --red: #7a1818;
+  --red-light: #c04040;
+  --text: #f0e6d0;
+  --text-sec: #c0aa88;
+  --text-muted: #7a6a50;
+  --border: rgba(200, 164, 94, 0.28);
+  --border-hi: rgba(200, 164, 94, 0.6);
+  --shadow: 0 4px 24px rgba(0, 0, 0, 0.7);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'STKaiti', 'KaiTi', 'SimKai', 'FangSong', 'STFangsong', serif;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ===== LAYOUT ===== */
+.layout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}

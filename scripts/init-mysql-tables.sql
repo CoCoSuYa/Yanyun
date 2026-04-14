@@ -24,11 +24,7 @@ CREATE TABLE IF NOT EXISTS users (
   juejin_high_score INT DEFAULT 0,
   achievements JSON,
   juejin_completed BOOLEAN DEFAULT FALSE,
-  open_id VARCHAR(100),
   is_admin BOOLEAN DEFAULT FALSE,
-  mp_quota JSON,
-  invite_log JSON,
-  pending_invites JSON,
   juejin_last_played TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -84,20 +80,4 @@ CREATE TABLE IF NOT EXISTS suggestions (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_created_at (created_at DESC),
   FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- 同步队列表
-CREATE TABLE IF NOT EXISTS sync_queue (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  operation ENUM('INSERT', 'UPDATE', 'DELETE') NOT NULL,
-  table_name VARCHAR(50) NOT NULL,
-  record_id VARCHAR(36) NOT NULL,
-  data JSON,
-  status ENUM('PENDING', 'SUCCESS', 'FAILED') DEFAULT 'PENDING',
-  retry_count INT DEFAULT 0,
-  error_message TEXT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  INDEX idx_status (status),
-  INDEX idx_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
