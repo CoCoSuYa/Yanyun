@@ -139,7 +139,7 @@ async function checkAndSync(tableName, cloudDoc) {
 // 动态 UPSERT（自动适配不同表的字段）
 async function upsertRecord(conn, tableName, cloudDoc) {
   // 过滤掉云库内部字段和同步元数据字段
-  const skipFields = new Set(['_id', '_openid', '_syncVersion', '_dataSource', 'updatedAt']);
+  const skipFields = new Set(['_id', '_openid', '_syncVersion', '_dataSource', 'updatedAt', '_createdAt']);
   
   // 字段名映射：云库 camelCase → MySQL snake_case
   const fieldMap = {
@@ -162,6 +162,10 @@ async function upsertRecord(conn, tableName, cloudDoc) {
     readSuggestionIds: 'read_suggestion_ids',
     contributionPoints: 'contribution_points',
     createdAt: 'created_at',
+    juejinHighScore: 'juejin_high_score',
+    juejinCompleted: 'juejin_completed',
+    juejinLastPlayed: 'juejin_last_played',
+    achievements: 'achievements',
     
     // teams 表
     leaderId: 'leader_id',
@@ -172,6 +176,18 @@ async function upsertRecord(conn, tableName, cloudDoc) {
     // suggestions 表
     userId: 'user_id'
   };
+  
+  // 数据清洗函数：过滤数组中的无效值
+  function cleanArray(arr) {
+    if (!Array.isArray(arr)) return arr;
+    return arr.filter(item => 
+      item !== null && 
+      item !== undefined && 
+      item !== 'undefined' && 
+      item !== 'null' &&
+      item !== ''
+    );
+  }
   
   // 转换字段名并准备数据
   const mysqlFields = [];
@@ -184,7 +200,13 @@ async function upsertRecord(conn, tableName, cloudDoc) {
     mysqlFields.push(mysqlField);
     
     // 处理特殊类型
-    if (typeof value === 'object' && value !== null) {
+    if (value === null || value === undefined) {
+      values.push(null);
+    } else if (Array.isArray(value)) {
+      // 清洗数组，过滤无效值
+      const cleanedArray = cleanArray(value);
+      values.push(JSON.stringify(cleanedArray));
+    } else if (typeof value === 'object') {
       values.push(JSON.stringify(value));
     } else if (typeof value === 'boolean') {
       values.push(value ? 1 : 0);
