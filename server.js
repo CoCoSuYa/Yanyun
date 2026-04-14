@@ -1484,10 +1484,10 @@ app.post('/api/lottery/clear-winners', async (req, res) => {
   lottery.lastClear = new Date().toISOString();
 
   try {
-    // 更新MySQL
+    // 更新MySQL（转换为 MySQL DATETIME 格式）
     await lotteryDao.updateLottery({
       winners: JSON.stringify(lottery.winners),
-      banner_cleared_at: lottery.bannerClearedAt,
+      banner_cleared_at: new Date(lottery.bannerClearedAt).toISOString().slice(0, 19).replace('T', ' '),
       last_clear: lottery.lastClear
     });
 
