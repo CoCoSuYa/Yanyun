@@ -398,9 +398,6 @@
             renderStats(signStatus.signInCount || 0, freshUser.lotteryCount || 0);
             renderAchievements(achievementData);
             hideLoading();
-
-            // 初始化完成后设置控制台命令
-            setupConsoleCommand();
         } catch (e) {
             hideLoading();
             const msg = e && e.message ? e.message : '个人页加载失败';
@@ -413,107 +410,6 @@
                 }, 300);
             }
         }
-    }
-
-    function setupConsoleCommand() {
-        window.get_achievement = async function (tag) {
-            if (!currentUser || !currentUser.id) {
-                console.error('❌ 未登录，无法触发成就');
-                return;
-            }
-
-            const tagMap = {
-                1: { name: '初心不改', count: 30 },
-                2: { name: '坚持不懈', count: 90 },
-                3: { name: '半载相伴', count: 180 },
-                4: { name: '岁月如歌', count: 365 },
-                5: { name: '掘金之王', juejin: true }
-            };
-
-            const config = tagMap[tag];
-            if (!config) {
-                console.error('❌ 无效的tag参数，请使用1-5');
-                console.log('参数说明: 1=30天签到, 2=90天签到, 3=180天签到, 4=365天签到, 5=掘金通关');
-                return;
-            }
-
-            try {
-                console.log(`🎯 正在触发成就: ${config.name}...`);
-                const result = await api('POST', '/api/achievements/trigger', {
-                    userId: currentUser.id,
-                    tag: tag
-                });
-
-                if (result.achievement) {
-                    console.log(`✅ 成就已解锁: ${result.achievement.name} - ${result.achievement.desc}`);
-                    showAchievementUnlocked(result.achievement);
-                    const achievementData = await fetchAchievements(currentUser.id);
-                    renderAchievements(achievementData);
-                } else {
-                    console.log('✅ 成就条件已设置，但可能已解锁过');
-                }
-            } catch (e) {
-                console.error('❌ 触发失败:', e.error || e.message || e);
-            }
-        };
-
-        window.set_checkin_days = async function (username, days) {
-            if (!username || days === undefined) {
-                console.error('❌ 参数错误，用法: set_checkin_days("游戏名", 天数)');
-                return;
-            }
-
-            try {
-                console.log(`🎯 正在设置 ${username} 的签到天数为 ${days}...`);
-                const result = await api('POST', '/api/users/set-checkin-days', {
-                    username: username,
-                    days: days
-                });
-
-                if (result.success) {
-                    console.log(`✅ 设置成功: ${result.gameName} 的签到天数已设置为 ${result.signInCount} 天`);
-
-                    // 如果是当前用户，刷新页面数据
-                    if (currentUser && currentUser.gameName === username) {
-                        const [freshUser, signStatus, achievementData] = await Promise.all([
-                            refreshUser(currentUser),
-                            fetchSignInStatus(currentUser.id),
-                            fetchAchievements(currentUser.id)
-                        ]);
-                        renderUserInfo(freshUser);
-                        renderStats(signStatus.signInCount || 0, freshUser.lotteryCount || 0);
-                        renderAchievements(achievementData);
-                        console.log('✅ 页面数据已刷新');
-                    }
-                } else {
-                    console.log('⚠️ 设置完成，但返回结果异常');
-                }
-            } catch (e) {
-                console.error('❌ 设置失败:', e.error || e.message || e);
-            }
-        };
-
-        console.log('💡 提示: 使用 get_achievement(1-5) 命令测试成就解锁');
-        console.log('   1=30天签到, 2=90天签到, 3=180天签到, 4=365天签到, 5=掘金通关');
-        console.log('💡 提示: 使用 set_checkin_days("游戏名", 天数) 设置签到天数');
-
-        window.list_users = async function () {
-            try {
-                const result = await api('GET', '/api/users');
-                if (Array.isArray(result)) {
-                    console.log('📋 当前所有用户:');
-                    result.forEach((u, i) => {
-                        console.log(`  ${i + 1}. ${u.gameName} (ID: ${u.id}, 签到: ${u.signInCount || 0}天)`);
-                    });
-                } else {
-                    console.log('⚠️ 无法获取用户列表');
-                }
-            } catch (e) {
-                console.error('❌ 获取失败:', e.error || e.message || e);
-            }
-        };
-
-        console.log('💡 提示: 使用 list_users() 查看所有用户名');
     }
 
     if (document.readyState === 'loading') {
