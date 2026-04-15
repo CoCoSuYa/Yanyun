@@ -15,17 +15,24 @@ async function main() {
   
   // 1. 从 MySQL 读取 lottery 数据
   const [rows] = await db.query('SELECT * FROM lottery LIMIT 1');
-  if (!rows || rows.length === 0) {
-    console.error('[初始化] MySQL 中没有 lottery 数据');
-    process.exit(1);
-  }
   
-  const mysqlLottery = rows[0];
-  console.log('[初始化] 从 MySQL 读取到 lottery 数据');
-  console.log('  - slots:', mysqlLottery.slots ? JSON.parse(mysqlLottery.slots).length + ' 个格子' : '空');
-  console.log('  - winners:', mysqlLottery.winners ? JSON.parse(mysqlLottery.winners).length + ' 条记录' : '空');
-  console.log('  - banner_cleared_at:', mysqlLottery.banner_cleared_at);
-  console.log('  - last_clear:', mysqlLottery.last_clear);
+  let mysqlLottery;
+  if (!rows || rows.length === 0) {
+    console.log('[初始化] MySQL 中没有 lottery 数据，使用默认值');
+    mysqlLottery = {
+      slots: JSON.stringify([]),
+      winners: JSON.stringify([]),
+      banner_cleared_at: null,
+      last_clear: null
+    };
+  } else {
+    mysqlLottery = rows[0];
+    console.log('[初始化] 从 MySQL 读取到 lottery 数据');
+    console.log('  - slots:', mysqlLottery.slots ? JSON.parse(mysqlLottery.slots).length + ' 个格子' : '空');
+    console.log('  - winners:', mysqlLottery.winners ? JSON.parse(mysqlLottery.winners).length + ' 条记录' : '空');
+    console.log('  - banner_cleared_at:', mysqlLottery.banner_cleared_at);
+    console.log('  - last_clear:', mysqlLottery.last_clear);
+  }
   
   // 2. 初始化云开发
   const env = process.env.MP_CLOUD_ENV;
