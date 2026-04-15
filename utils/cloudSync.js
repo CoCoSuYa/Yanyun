@@ -105,7 +105,13 @@ async function syncDeleteUserFromCloud(userId, gameName) {
   
   try {
     const result = await db.collection('users').doc(userId).remove();
-    console.log(`[云同步] ✓ 用户 ${gameName} (${userId}) 已从云库删除，删除数量: ${result.deleted || 1}`);
+    
+    // 根据 result.deleted 判断成功/失败
+    if (result.deleted === 0) {
+      console.error(`[云同步] ✗ 用户 ${gameName} (${userId}) 删除失败：云库中不存在该文档（deleted=0）`);
+    } else {
+      console.log(`[云同步] ✓ 用户 ${gameName} (${userId}) 已从云库删除，删除数量: ${result.deleted}`);
+    }
   } catch (err) {
     // 失败只打日志，不抛异常（不影响主流程）
     console.error(`[云同步] ✗ 用户 ${gameName} (${userId}) 从云库删除失败`);
@@ -282,7 +288,13 @@ async function syncDeleteTeamFromCloud(teamId) {
   
   try {
     const result = await db.collection('teams').doc(teamId).remove();
-    console.log(`[云同步] ✓ 队伍 ${teamId} 已从云库删除，删除数量: ${result.deleted || 1}`);
+    
+    // 根据 result.deleted 判断成功/失败
+    if (result.deleted === 0) {
+      console.error(`[云同步] ✗ 队伍 ${teamId} 删除失败：云库中不存在该文档（deleted=0）`);
+    } else {
+      console.log(`[云同步] ✓ 队伍 ${teamId} 已从云库删除，删除数量: ${result.deleted}`);
+    }
   } catch (err) {
     console.error(`[云同步] ✗ 队伍 ${teamId} 从云库删除失败`);
     console.error(`[云同步] 错误类型: ${err.name || 'Unknown'}`);
