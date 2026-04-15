@@ -169,6 +169,11 @@ async function uploadAvatar(userId, { fileName, contentType, dataUrl }) {
 
   user.avatarUrl = `/uploads/avatars/${avatarFileName}`;
   await userDao.updateUser(user.id, { avatar_url: user.avatarUrl });
+  
+  // 异步同步到云库（不阻塞主流程，失败打印日志）
+  syncUpdateUserToCloud(user.id, { avatarUrl: user.avatarUrl }).catch(err => {
+    console.error(`[头像上传] 云同步失败: ${err.message}`);
+  });
 
   broadcast({ type: 'user_updated', data: safeUser(user) });
   return { avatarUrl: user.avatarUrl, user: safeUser(user) };
