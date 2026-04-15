@@ -45,7 +45,7 @@ async function fixTeamsTimeFormat(errorMessage) {
     console.log(`[数据修复] 错误信息: ${errorMessage}`);
 
     try {
-        const [teams] = await db.query('SELECT id, time FROM teams');
+        const teams = await db.query('SELECT id, time FROM teams');
         console.log(`[数据修复] 共 ${teams.length} 条队伍记录待检查`);
 
         let fixed = 0;
@@ -73,7 +73,7 @@ async function syncUsersToCloud() {
     const cdb = initCloud();
 
     try {
-        const [users] = await db.query('SELECT * FROM users ORDER BY created_at');
+        const users = await db.query('SELECT * FROM users ORDER BY created_at');
         console.log(`[用户同步] 共 ${users.length} 个用户待同步`);
 
         let success = 0;
@@ -140,7 +140,7 @@ async function syncTeamsToCloud() {
     const cdb = initCloud();
 
     try {
-        const [teams] = await db.query('SELECT * FROM teams ORDER BY created_at');
+        const teams = await db.query('SELECT * FROM teams ORDER BY created_at');
         console.log(`[队伍同步] 共 ${teams.length} 个队伍待同步`);
 
         let success = 0;
@@ -194,7 +194,7 @@ async function syncLotteryToCloud() {
     const cdb = initCloud();
 
     try {
-        const [lotteryRows] = await db.query('SELECT * FROM lottery LIMIT 1');
+        const lotteryRows = await db.query('SELECT * FROM lottery LIMIT 1');
 
         if (lotteryRows.length === 0) {
             console.log('[抽奖同步] ⚠️  MySQL 中无抽奖数据，跳过');
@@ -233,7 +233,7 @@ async function syncNoticesToCloud() {
     const cdb = initCloud();
 
     try {
-        const [notices] = await db.query('SELECT * FROM notices ORDER BY created_at DESC');
+        const notices = await db.query('SELECT * FROM notices ORDER BY created_at DESC');
         console.log(`[公告同步] 共 ${notices.length} 条公告待同步`);
 
         if (notices.length === 0) {
@@ -285,7 +285,7 @@ async function syncSuggestionsToCloud() {
     const cdb = initCloud();
 
     try {
-        const [suggestions] = await db.query('SELECT * FROM suggestions ORDER BY created_at DESC');
+        const suggestions = await db.query('SELECT * FROM suggestions ORDER BY created_at DESC');
         console.log(`[建议同步] 共 ${suggestions.length} 条建议待同步`);
 
         if (suggestions.length === 0) {
