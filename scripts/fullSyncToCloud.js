@@ -83,6 +83,20 @@ async function syncUsersToCloud() {
         for (let i = 0; i < users.length; i++) {
             const user = users[i];
             try {
+                // 辅助函数：安全解析 JSON（处理 Buffer 类型）
+                const safeParseJSON = (value, defaultValue = null) => {
+                    if (!value) return defaultValue;
+                    if (Buffer.isBuffer(value)) value = value.toString('utf8');
+                    if (typeof value === 'string') {
+                        try {
+                            return JSON.parse(value);
+                        } catch (e) {
+                            return defaultValue;
+                        }
+                    }
+                    return value;
+                };
+
                 const cloudDoc = {
                     _id: user.id,
                     game_name: user.game_name,
@@ -95,18 +109,18 @@ async function syncUsersToCloud() {
                     lottery_count: user.lottery_count || 1,
                     sign_in_count: user.sign_in_count || 0,
                     last_sign_in_date: user.last_sign_in_date || null,
-                    read_notice_ids: user.read_notice_ids ? JSON.parse(user.read_notice_ids) : [],
-                    read_suggestion_ids: user.read_suggestion_ids ? JSON.parse(user.read_suggestion_ids) : [],
+                    read_notice_ids: safeParseJSON(user.read_notice_ids, []),
+                    read_suggestion_ids: safeParseJSON(user.read_suggestion_ids, []),
                     contribution_points: user.contribution_points || 0,
                     consecutive_sign_ins: user.consecutive_sign_ins || 0,
                     juejin_high_score: user.juejin_high_score || 0,
-                    achievements: user.achievements ? JSON.parse(user.achievements) : [],
+                    achievements: safeParseJSON(user.achievements, []),
                     juejin_completed: user.juejin_completed || false,
                     open_id: user.open_id || null,
                     juejin_last_played: user.juejin_last_played || null,
-                    mp_quota: user.mp_quota ? JSON.parse(user.mp_quota) : { invite: 0, full: 0, remind: 0 },
-                    invite_log: user.invite_log ? JSON.parse(user.invite_log) : {},
-                    pending_invites: user.pending_invites ? JSON.parse(user.pending_invites) : [],
+                    mp_quota: safeParseJSON(user.mp_quota, { invite: 0, full: 0, remind: 0 }),
+                    invite_log: safeParseJSON(user.invite_log, {}),
+                    pending_invites: safeParseJSON(user.pending_invites, []),
                     created_at: user.created_at ? new Date(user.created_at).toISOString() : new Date().toISOString(),
                     updated_at: user.updated_at ? new Date(user.updated_at).toISOString() : new Date().toISOString()
                 };
@@ -150,6 +164,20 @@ async function syncTeamsToCloud() {
         for (let i = 0; i < teams.length; i++) {
             const team = teams[i];
             try {
+                // 辅助函数：安全解析 JSON（处理 Buffer 类型）
+                const safeParseJSON = (value, defaultValue = null) => {
+                    if (!value) return defaultValue;
+                    if (Buffer.isBuffer(value)) value = value.toString('utf8');
+                    if (typeof value === 'string') {
+                        try {
+                            return JSON.parse(value);
+                        } catch (e) {
+                            return defaultValue;
+                        }
+                    }
+                    return value;
+                };
+
                 const cloudDoc = {
                     _id: team.id,
                     type: team.type,
@@ -157,7 +185,7 @@ async function syncTeamsToCloud() {
                     date: team.date,
                     time: team.time,
                     leader_id: team.leader_id,
-                    members: team.members ? JSON.parse(team.members) : [],
+                    members: safeParseJSON(team.members, []),
                     max_size: team.max_size || 10,
                     full_notified: team.full_notified || false,
                     remind_sent: team.remind_sent || false,
@@ -205,10 +233,24 @@ async function syncLotteryToCloud() {
         console.log(`[抽奖同步] 开始同步抽奖数据...`);
 
         try {
+            // 辅助函数：安全解析 JSON（处理 Buffer 类型）
+            const safeParseJSON = (value, defaultValue = null) => {
+                if (!value) return defaultValue;
+                if (Buffer.isBuffer(value)) value = value.toString('utf8');
+                if (typeof value === 'string') {
+                    try {
+                        return JSON.parse(value);
+                    } catch (e) {
+                        return defaultValue;
+                    }
+                }
+                return value;
+            };
+
             const cloudDoc = {
                 _id: 'singleton',
-                slots: lottery.slots ? JSON.parse(lottery.slots) : [],
-                winners: lottery.winners ? JSON.parse(lottery.winners) : [],
+                slots: safeParseJSON(lottery.slots, []),
+                winners: safeParseJSON(lottery.winners, []),
                 banner_cleared_at: lottery.banner_cleared_at || null,
                 last_clear: lottery.last_clear || null,
                 updated_at: lottery.updated_at ? new Date(lottery.updated_at).toISOString() : new Date().toISOString()
