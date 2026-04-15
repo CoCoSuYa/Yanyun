@@ -1,13 +1,13 @@
 /**
  * 公告服务
  * CRUD + 已读标记
- * 已去除：云同步、直接云库操作
  */
 const { v4: uuidv4 } = require('uuid');
 const cache = require('../cache');
 const userDao = require('../dao/userDao');
 const noticeDao = require('../dao/noticeDao');
 const { toMySQLDateTime, toChineseDate } = require('../utils/format');
+const { syncNewNoticeToCloud, syncDeleteNoticeFromCloud, syncUpdateUserToCloud } = require('../utils/cloudSync');
 
 function listNotices(userId) {
   const notices = cache.getNotices();
@@ -45,12 +45,19 @@ async function createNotice(adminId, content) {
   const notices = cache.getNotices();
   notices.unshift(newNotice);
 
+  // 异步同步到云库（不阻塞主流程，失败静默处理）
+  syncNewNoticeToCloud(newNotice).catch(() => { });
+
   return { id: noticeId, content, date: createdAt };
 }
 
 async function deleteNotice(noticeId) {
   await noticeDao.deleteNotice(noticeId);
   cache.setNotices(cache.getNotices().filter(n => n.id !== noticeId));
+
+  // 异步同步到云库（不阻塞主流程，失败静默处理）
+  syncDeleteNoticeFromCloud(noticeId).catch(() => { });
+
   return { ok: true };
 }
 
@@ -64,6 +71,9 @@ async function markNoticeRead(userId, noticeId) {
   if (!user.readNoticeIds.includes(noticeId)) {
     user.readNoticeIds.push(noticeId);
     await userDao.updateUser(userId, { read_notice_ids: JSON.stringify(user.readNoticeIds) });
+
+    // 异步同步到云库（不阻塞主流程，失败静默处理）
+    syncUpdateUserToCloud(userId, { readNoticeIds: user.readNoticeIds }).catch(() => { });
   }
 
   return { ok: true };

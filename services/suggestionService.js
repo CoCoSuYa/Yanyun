@@ -1,13 +1,13 @@
 /**
  * 建议服务
  * CRUD + 已读标记
- * 已去除：云同步、直接云库操作
  */
 const { v4: uuidv4 } = require('uuid');
 const cache = require('../cache');
 const userDao = require('../dao/userDao');
 const suggestionDao = require('../dao/suggestionDao');
 const { toMySQLDateTime } = require('../utils/format');
+const { syncNewSuggestionToCloud, syncDeleteSuggestionFromCloud, syncUpdateUserToCloud } = require('../utils/cloudSync');
 
 function listSuggestions(adminId) {
   const suggestions = cache.getSuggestions();
@@ -41,12 +41,19 @@ async function createSuggestion(userId, content) {
   const suggestions = cache.getSuggestions();
   suggestions.unshift(newSuggestion);
 
+  // 异步同步到云库（不阻塞主流程，失败静默处理）
+  syncNewSuggestionToCloud(newSuggestion).catch(() => { });
+
   return { id: suggestionId, content, date: createdAt };
 }
 
 async function deleteSuggestion(suggestionId) {
   await suggestionDao.deleteSuggestion(suggestionId);
   cache.setSuggestions(cache.getSuggestions().filter(s => s.id !== suggestionId));
+
+  // 异步同步到云库（不阻塞主流程，失败静默处理）
+  syncDeleteSuggestionFromCloud(suggestionId).catch(() => { });
+
   return { ok: true };
 }
 
@@ -60,6 +67,9 @@ async function markSuggestionRead(adminId, suggestionId) {
   if (!admin.readSuggestionIds.includes(suggestionId)) {
     admin.readSuggestionIds.push(suggestionId);
     await userDao.updateUser(adminId, { read_suggestion_ids: JSON.stringify(admin.readSuggestionIds) });
+
+    // 异步同步到云库（不阻塞主流程，失败静默处理）
+    syncUpdateUserToCloud(adminId, { readSuggestionIds: admin.readSuggestionIds }).catch(() => { });
   }
 
   return { ok: true };
