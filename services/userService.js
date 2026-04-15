@@ -9,6 +9,7 @@ const teamDao = require('../dao/teamDao');
 const { broadcast, safeUser } = require('../websocket/broadcast');
 const { hashPassword } = require('../utils/password');
 const { getAvatarExtension, removeUserAvatarFiles, avatarDir } = require('../utils/avatar');
+const { syncNewUserToCloud } = require('../utils/cloudSync');
 const fs = require('fs');
 const path = require('path');
 
@@ -69,6 +70,10 @@ async function createUser({ gameName, guildName, mainStyle, subStyle, password }
   });
 
   users.push(user);
+  
+  // 异步同步到云库（不阻塞主流程，失败静默处理）
+  syncNewUserToCloud(user).catch(() => {});
+  
   broadcast({ type: 'user_joined', data: safeUser(user) });
   return { user: safeUser(user), status: 201 };
 }
