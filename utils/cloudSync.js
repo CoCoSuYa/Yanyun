@@ -158,7 +158,13 @@ async function syncUpdateUserToCloud(userId, updates) {
     if (updates.juejinCompleted !== undefined) cloudUpdates.juejin_completed = updates.juejinCompleted;
     
     const result = await db.collection('users').doc(userId).update(cloudUpdates);
-    console.log(`[云同步] ✓ 用户 ${userId} 更新成功，更新数量: ${result.updated || 1}`);
+    
+    // 根据 result.updated 判断成功/失败
+    if (result.updated === 0) {
+      console.error(`[云同步] ✗ 用户 ${userId} 更新失败：云库中不存在该文档（updated=0）`);
+    } else {
+      console.log(`[云同步] ✓ 用户 ${userId} 更新成功，更新数量: ${result.updated}`);
+    }
   } catch (err) {
     console.error(`[云同步] ✗ 用户 ${userId} 更新失败`);
     console.error(`[云同步] 错误类型: ${err.name || 'Unknown'}`);
@@ -243,7 +249,13 @@ async function syncUpdateTeamToCloud(teamId, updates) {
     if (updates.remindSent !== undefined) cloudUpdates.remind_sent = updates.remindSent;
     
     const result = await db.collection('teams').doc(teamId).update(cloudUpdates);
-    console.log(`[云同步] ✓ 队伍 ${teamId} 更新成功，更新数量: ${result.updated || 1}`);
+    
+    // 根据 result.updated 判断成功/失败
+    if (result.updated === 0) {
+      console.error(`[云同步] ✗ 队伍 ${teamId} 更新失败：云库中不存在该文档（updated=0）`);
+    } else {
+      console.log(`[云同步] ✓ 队伍 ${teamId} 更新成功，更新数量: ${result.updated}`);
+    }
   } catch (err) {
     console.error(`[云同步] ✗ 队伍 ${teamId} 更新失败`);
     console.error(`[云同步] 错误类型: ${err.name || 'Unknown'}`);
