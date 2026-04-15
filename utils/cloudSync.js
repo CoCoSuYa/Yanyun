@@ -119,6 +119,46 @@ async function syncDeleteUserFromCloud(userId, gameName) {
 }
 
 /**
+ * 更新用户信息时同步到云库（失败不影响主流程）
+ * @param {string} userId - 用户 ID
+ * @param {Object} updates - 要更新的字段（camelCase 格式）
+ */
+async function syncUpdateUserToCloud(userId, updates) {
+  const db = initCloud();
+  if (!db) {
+    console.warn(`[云同步] 跳过更新用户 ${userId}：云开发未配置`);
+    return;
+  }
+  
+  console.log(`[云同步] 开始同步更新用户 ${userId} 到云库...`);
+  console.log(`[云同步] 更新字段: ${Object.keys(updates).join(', ')}`);
+  
+  try {
+    // 转换为 snake_case
+    const cloudUpdates = {
+      updated_at: new Date().toISOString()
+    };
+    
+    if (updates.gameName !== undefined) cloudUpdates.game_name = updates.gameName;
+    if (updates.mainStyle !== undefined) cloudUpdates.main_style = updates.mainStyle;
+    if (updates.subStyle !== undefined) cloudUpdates.sub_style = updates.subStyle;
+    if (updates.passwordHash !== undefined) cloudUpdates.password_hash = updates.passwordHash;
+    if (updates.avatarUrl !== undefined) cloudUpdates.avatar_url = updates.avatarUrl;
+    
+    const result = await db.collection('users').doc(userId).update(cloudUpdates);
+    console.log(`[云同步] ✓ 用户 ${userId} 更新成功，更新数量: ${result.updated || 1}`);
+  } catch (err) {
+    console.error(`[云同步] ✗ 用户 ${userId} 更新失败`);
+    console.error(`[云同步] 错误类型: ${err.name || 'Unknown'}`);
+    console.error(`[云同步] 错误信息: ${err.message}`);
+    console.error(`[云同步] 错误代码: ${err.code || 'N/A'}`);
+    if (err.stack) {
+      console.error(`[云同步] 错误堆栈:\n${err.stack.split('\n').slice(0, 5).join('\n')}`);
+    }
+  }
+}
+
+/**
  * 新建队伍时同步到云库（失败不影响主流程）
  * @param {Object} team - 队伍对象（camelCase 格式）
  */
@@ -232,6 +272,7 @@ async function syncDeleteTeamFromCloud(teamId) {
 
 module.exports = { 
   syncNewUserToCloud, 
+  syncUpdateUserToCloud,
   syncDeleteUserFromCloud,
   syncNewTeamToCloud,
   syncUpdateTeamToCloud,

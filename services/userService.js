@@ -9,7 +9,8 @@ const teamDao = require('../dao/teamDao');
 const { broadcast, safeUser } = require('../websocket/broadcast');
 const { hashPassword } = require('../utils/password');
 const { getAvatarExtension, removeUserAvatarFiles, avatarDir } = require('../utils/avatar');
-const { syncNewUserToCloud, syncDeleteUserFromCloud } = require('../utils/cloudSync');
+const { syncNewUserToCloud, syncUpdateUserToCloud, syncDeleteUserFromCloud } = require('../utils/cloudSync');
+const { syncUpdateTeamToCloud } = require('../utils/cloudSync');
 const fs = require('fs');
 const path = require('path');
 
@@ -109,6 +110,15 @@ async function updateUser(userId, { gameName, mainStyle, subStyle, oldPassword, 
   if (newPassword) updateData.password_hash = user.passwordHash;
   await userDao.updateUser(user.id, updateData);
 
+  // 异步同步到云库（不阻塞主流程，失败静默处理）
+  const cloudUpdateData = {
+    gameName: user.gameName,
+    mainStyle: user.mainStyle,
+    subStyle: user.subStyle
+  };
+  if (newPassword) cloudUpdateData.passwordHash = user.passwordHash;
+  syncUpdateUserToCloud(user.id, cloudUpdateData).catch(() => {});
+
   // 级联更新 teams 中的成员信息
   const teams = cache.getTeams();
   const affectedTeams = [];
@@ -125,6 +135,9 @@ async function updateUser(userId, { gameName, mainStyle, subStyle, oldPassword, 
     if (changed) {
       affectedTeams.push(team);
       await teamDao.updateTeam(team.id, { members: JSON.stringify(team.members) });
+      
+      // 异步同步到云库（更新队伍成员信息）
+      syncUpdateTeamToCloud(team.id, { members: team.members }).catch(() => {});
     }
   }
 
