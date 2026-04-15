@@ -306,11 +306,57 @@ async function syncDeleteTeamFromCloud(teamId) {
   }
 }
 
+/**
+ * 更新抽奖数据时同步到云库（失败不影响主流程）
+ * @param {Object} updates - 要更新的字段（camelCase 格式）
+ */
+async function syncUpdateLotteryToCloud(updates) {
+  const db = initCloud();
+  if (!db) {
+    console.warn(`[云同步] 跳过更新抽奖数据：云开发未配置`);
+    return;
+  }
+  
+  console.log(`[云同步] 开始同步更新抽奖数据到云库...`);
+  console.log(`[云同步] 更新字段: ${Object.keys(updates).join(', ')}`);
+  
+  try {
+    // 转换为 snake_case
+    const cloudUpdates = {
+      updated_at: new Date().toISOString()
+    };
+    
+    if (updates.slots !== undefined) cloudUpdates.slots = updates.slots;
+    if (updates.winners !== undefined) cloudUpdates.winners = updates.winners;
+    if (updates.bannerClearedAt !== undefined) cloudUpdates.banner_cleared_at = updates.bannerClearedAt;
+    if (updates.lastClear !== undefined) cloudUpdates.last_clear = updates.lastClear;
+    
+    // lottery 表是单例，固定 _id 为 'singleton'
+    const result = await db.collection('lottery').doc('singleton').update(cloudUpdates);
+    
+    // 根据 result.updated 判断成功/失败
+    if (result.updated === 0) {
+      console.error(`[云同步] ✗ 抽奖数据更新失败：云库中不存在该文档（updated=0）`);
+    } else {
+      console.log(`[云同步] ✓ 抽奖数据更新成功，更新数量: ${result.updated}`);
+    }
+  } catch (err) {
+    console.error(`[云同步] ✗ 抽奖数据更新失败`);
+    console.error(`[云同步] 错误类型: ${err.name || 'Unknown'}`);
+    console.error(`[云同步] 错误信息: ${err.message}`);
+    console.error(`[云同步] 错误代码: ${err.code || 'N/A'}`);
+    if (err.stack) {
+      console.error(`[云同步] 错误堆栈:\n${err.stack.split('\n').slice(0, 5).join('\n')}`);
+    }
+  }
+}
+
 module.exports = { 
   syncNewUserToCloud, 
   syncUpdateUserToCloud,
   syncDeleteUserFromCloud,
   syncNewTeamToCloud,
   syncUpdateTeamToCloud,
-  syncDeleteTeamFromCloud
+  syncDeleteTeamFromCloud,
+  syncUpdateLotteryToCloud
 };

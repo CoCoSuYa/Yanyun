@@ -8,6 +8,7 @@ const userDao = require('../dao/userDao');
 const lotteryDao = require('../dao/lotteryDao');
 const { broadcast } = require('../websocket/broadcast');
 const { isAdminUser } = require('../utils/password');
+const { syncUpdateLotteryToCloud } = require('../utils/cloudSync');
 
 function getLottery() {
   const lottery = cache.getLottery();
@@ -29,6 +30,12 @@ async function updateSlot(adminId, idx, { text, quantity, isWinning }) {
 
   try {
     await lotteryDao.updateLottery({ slots: JSON.stringify(lottery.slots) });
+    
+    // 异步同步到云库（不阻塞主流程，失败打印日志）
+    syncUpdateLotteryToCloud({ slots: lottery.slots }).catch(err => {
+      console.error(`[转盘配置] 云同步失败: ${err.message}`);
+    });
+    
     broadcast({ type: 'lottery_update', data: { slots: lottery.slots } });
     return { slot: lottery.slots[idx] };
   } catch (e) {
@@ -99,6 +106,14 @@ async function spin(userId) {
     });
     await userDao.updateUser(user.id, { lottery_count: user.lotteryCount });
 
+    // 异步同步到云库（不阻塞主流程，失败打印日志）
+    syncUpdateLotteryToCloud({ 
+      slots: lottery.slots, 
+      winners: lottery.winners 
+    }).catch(err => {
+      console.error(`[用户抽奖] 云同步失败: ${err.message}`);
+    });
+
     broadcast({ type: 'lottery_slot_update', data: { slotIndex: winIdx, quantity: slot.quantity } });
     broadcast({ type: 'lottery_winner', data: winner });
 
@@ -129,6 +144,14 @@ async function clearBanner(adminId) {
     await lotteryDao.updateLottery({
       banner_cleared_at: new Date(lottery.bannerClearedAt).toISOString().slice(0, 19).replace('T', ' ')
     });
+    
+    // 异步同步到云库（不阻塞主流程，失败打印日志）
+    syncUpdateLotteryToCloud({ 
+      bannerClearedAt: lottery.bannerClearedAt 
+    }).catch(err => {
+      console.error(`[清空轮播] 云同步失败: ${err.message}`);
+    });
+    
     broadcast({ type: 'lottery_banner_cleared', data: { clearedAt: lottery.bannerClearedAt } });
     return { ok: true };
   } catch (e) {
@@ -158,6 +181,16 @@ async function clearWinners(adminId) {
       banner_cleared_at: new Date(lottery.bannerClearedAt).toISOString().slice(0, 19).replace('T', ' '),
       last_clear: new Date(lottery.lastClear).getTime()
     });
+    
+    // 异步同步到云库（不阻塞主流程，失败打印日志）
+    syncUpdateLotteryToCloud({ 
+      winners: lottery.winners,
+      bannerClearedAt: lottery.bannerClearedAt,
+      lastClear: lottery.lastClear
+    }).catch(err => {
+      console.error(`[清空中奖记录] 云同步失败: ${err.message}`);
+    });
+    
     broadcast({ type: 'lottery_winners_cleared', data: { bannerClearedAt: lottery.bannerClearedAt } });
     return { ok: true };
   } catch (e) {
