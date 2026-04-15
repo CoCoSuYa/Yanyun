@@ -89,4 +89,33 @@ async function syncNewUserToCloud(user) {
   }
 }
 
-module.exports = { syncNewUserToCloud };
+/**
+ * 删除用户时同步删除云库数据（失败不影响主流程）
+ * @param {string} userId - 用户 ID
+ * @param {string} gameName - 用户游戏名（用于日志）
+ */
+async function syncDeleteUserFromCloud(userId, gameName) {
+  const db = initCloud();
+  if (!db) {
+    console.warn(`[云同步] 跳过删除用户 ${gameName} (${userId})：云开发未配置`);
+    return;
+  }
+  
+  console.log(`[云同步] 开始从云库删除用户 ${gameName} (${userId})...`);
+  
+  try {
+    const result = await db.collection('users').doc(userId).remove();
+    console.log(`[云同步] ✓ 用户 ${gameName} (${userId}) 已从云库删除，删除数量: ${result.deleted || 1}`);
+  } catch (err) {
+    // 失败只打日志，不抛异常（不影响主流程）
+    console.error(`[云同步] ✗ 用户 ${gameName} (${userId}) 从云库删除失败`);
+    console.error(`[云同步] 错误类型: ${err.name || 'Unknown'}`);
+    console.error(`[云同步] 错误信息: ${err.message}`);
+    console.error(`[云同步] 错误代码: ${err.code || 'N/A'}`);
+    if (err.stack) {
+      console.error(`[云同步] 错误堆栈:\n${err.stack.split('\n').slice(0, 5).join('\n')}`);
+    }
+  }
+}
+
+module.exports = { syncNewUserToCloud, syncDeleteUserFromCloud };

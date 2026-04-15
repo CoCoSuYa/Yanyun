@@ -9,7 +9,7 @@ const teamDao = require('../dao/teamDao');
 const { broadcast, safeUser } = require('../websocket/broadcast');
 const { hashPassword } = require('../utils/password');
 const { getAvatarExtension, removeUserAvatarFiles, avatarDir } = require('../utils/avatar');
-const { syncNewUserToCloud } = require('../utils/cloudSync');
+const { syncNewUserToCloud, syncDeleteUserFromCloud } = require('../utils/cloudSync');
 const fs = require('fs');
 const path = require('path');
 
@@ -201,6 +201,9 @@ async function deleteUser(targetUserId, adminId) {
 
   // 4. 从MySQL删除用户
   await userDao.deleteUser(targetUserId);
+
+  // 5. 异步从云库删除用户（不阻塞主流程，失败静默处理）
+  syncDeleteUserFromCloud(targetUserId, targetUser.gameName).catch(() => {});
 
   broadcast({ type: 'user_deleted', data: { id: targetUserId, gameName: targetUser.gameName } });
   return { success: true, message: `已删除游侠 ${targetUser.gameName}` };
