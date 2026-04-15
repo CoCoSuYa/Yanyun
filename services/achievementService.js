@@ -1,10 +1,10 @@
 /**
  * 成就服务
  * 成就检查/触发
- * 已去除：云同步；消除自调 API 反模式
  */
 const cache = require('../cache');
 const userDao = require('../dao/userDao');
+const { syncUpdateUserToCloud } = require('../utils/cloudSync');
 
 const ACHIEVEMENTS = [
   { id: 'signin_30', name: '初心不改', desc: '累计签到30天', type: 'signin', target: 30 },
@@ -54,6 +54,9 @@ async function checkAchievements(userId, type) {
     user.achievements = userAchievements;
     try {
       await userDao.updateUser(userId, { achievements: JSON.stringify(userAchievements) });
+
+      // 异步同步到云库（不阻塞主流程，失败静默处理）
+      syncUpdateUserToCloud(userId, { achievements: userAchievements }).catch(() => { });
     } catch (e) {
       return { error: '保存失败', status: 500 };
     }
