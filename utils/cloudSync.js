@@ -118,4 +118,122 @@ async function syncDeleteUserFromCloud(userId, gameName) {
   }
 }
 
-module.exports = { syncNewUserToCloud, syncDeleteUserFromCloud };
+/**
+ * 新建队伍时同步到云库（失败不影响主流程）
+ * @param {Object} team - 队伍对象（camelCase 格式）
+ */
+async function syncNewTeamToCloud(team) {
+  const db = initCloud();
+  if (!db) {
+    console.warn(`[云同步] 跳过队伍 ${team.id}：云开发未配置`);
+    return;
+  }
+  
+  console.log(`[云同步] 开始同步队伍 ${team.id} (${team.type}) 到云库...`);
+  
+  try {
+    // 构造云库文档（所有字段，snake_case 命名）
+    const cloudDoc = {
+      _id: team.id,
+      type: team.type,
+      purpose: team.purpose || '',
+      date: team.date,
+      time: team.time,
+      leader_id: team.leaderId,
+      members: team.members || [],  // 数组直接存储，云库原生支持
+      max_size: team.maxSize || 10,
+      full_notified: team.fullNotified || false,
+      remind_sent: team.remindSent || false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    
+    console.log(`[云同步] 准备写入云库文档，字段数: ${Object.keys(cloudDoc).length}，成员数: ${cloudDoc.members.length}`);
+    const result = await db.collection('teams').add(cloudDoc);
+    console.log(`[云同步] ✓ 队伍 ${team.id} (${team.type}) 同步成功，云库文档ID: ${result.id || team.id}`);
+  } catch (err) {
+    console.error(`[云同步] ✗ 队伍 ${team.id} 同步失败`);
+    console.error(`[云同步] 错误类型: ${err.name || 'Unknown'}`);
+    console.error(`[云同步] 错误信息: ${err.message}`);
+    console.error(`[云同步] 错误代码: ${err.code || 'N/A'}`);
+    if (err.stack) {
+      console.error(`[云同步] 错误堆栈:\n${err.stack.split('\n').slice(0, 5).join('\n')}`);
+    }
+  }
+}
+
+/**
+ * 更新队伍时同步到云库（失败不影响主流程）
+ * @param {string} teamId - 队伍 ID
+ * @param {Object} updates - 要更新的字段（camelCase 格式）
+ */
+async function syncUpdateTeamToCloud(teamId, updates) {
+  const db = initCloud();
+  if (!db) {
+    console.warn(`[云同步] 跳过更新队伍 ${teamId}：云开发未配置`);
+    return;
+  }
+  
+  console.log(`[云同步] 开始同步更新队伍 ${teamId} 到云库...`);
+  console.log(`[云同步] 更新字段: ${Object.keys(updates).join(', ')}`);
+  
+  try {
+    // 转换为 snake_case
+    const cloudUpdates = {
+      updated_at: new Date().toISOString()
+    };
+    
+    if (updates.members !== undefined) cloudUpdates.members = updates.members;
+    if (updates.leaderId !== undefined) cloudUpdates.leader_id = updates.leaderId;
+    if (updates.time !== undefined) cloudUpdates.time = updates.time;
+    if (updates.date !== undefined) cloudUpdates.date = updates.date;
+    if (updates.fullNotified !== undefined) cloudUpdates.full_notified = updates.fullNotified;
+    if (updates.remindSent !== undefined) cloudUpdates.remind_sent = updates.remindSent;
+    
+    const result = await db.collection('teams').doc(teamId).update(cloudUpdates);
+    console.log(`[云同步] ✓ 队伍 ${teamId} 更新成功，更新数量: ${result.updated || 1}`);
+  } catch (err) {
+    console.error(`[云同步] ✗ 队伍 ${teamId} 更新失败`);
+    console.error(`[云同步] 错误类型: ${err.name || 'Unknown'}`);
+    console.error(`[云同步] 错误信息: ${err.message}`);
+    console.error(`[云同步] 错误代码: ${err.code || 'N/A'}`);
+    if (err.stack) {
+      console.error(`[云同步] 错误堆栈:\n${err.stack.split('\n').slice(0, 5).join('\n')}`);
+    }
+  }
+}
+
+/**
+ * 删除队伍时同步删除云库数据（失败不影响主流程）
+ * @param {string} teamId - 队伍 ID
+ */
+async function syncDeleteTeamFromCloud(teamId) {
+  const db = initCloud();
+  if (!db) {
+    console.warn(`[云同步] 跳过删除队伍 ${teamId}：云开发未配置`);
+    return;
+  }
+  
+  console.log(`[云同步] 开始从云库删除队伍 ${teamId}...`);
+  
+  try {
+    const result = await db.collection('teams').doc(teamId).remove();
+    console.log(`[云同步] ✓ 队伍 ${teamId} 已从云库删除，删除数量: ${result.deleted || 1}`);
+  } catch (err) {
+    console.error(`[云同步] ✗ 队伍 ${teamId} 从云库删除失败`);
+    console.error(`[云同步] 错误类型: ${err.name || 'Unknown'}`);
+    console.error(`[云同步] 错误信息: ${err.message}`);
+    console.error(`[云同步] 错误代码: ${err.code || 'N/A'}`);
+    if (err.stack) {
+      console.error(`[云同步] 错误堆栈:\n${err.stack.split('\n').slice(0, 5).join('\n')}`);
+    }
+  }
+}
+
+module.exports = { 
+  syncNewUserToCloud, 
+  syncDeleteUserFromCloud,
+  syncNewTeamToCloud,
+  syncUpdateTeamToCloud,
+  syncDeleteTeamFromCloud
+};

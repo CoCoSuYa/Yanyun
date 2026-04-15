@@ -9,6 +9,7 @@ const teamDao = require('../dao/teamDao');
 const userDao = require('../dao/userDao');
 const { broadcast } = require('../websocket/broadcast');
 const { isAdminUser } = require('../utils/password');
+const { syncNewTeamToCloud, syncUpdateTeamToCloud, syncDeleteTeamFromCloud } = require('../utils/cloudSync');
 
 async function createTeam({ type, purpose, time, date, userId }) {
   const users = cache.getUsers();
@@ -56,6 +57,10 @@ async function createTeam({ type, purpose, time, date, userId }) {
   });
 
   teams.push(team);
+  
+  // 异步同步到云库（不阻塞主流程，失败静默处理）
+  syncNewTeamToCloud(team).catch(() => {});
+  
   broadcast({ type: 'team_created', data: team });
   return { team, status: 201 };
 }
@@ -97,6 +102,9 @@ async function joinTeam(teamId, userId) {
   (async () => {
     try {
       await teamDao.updateTeam(team.id, { members: JSON.stringify(team.members) });
+      
+      // 异步同步到云库（不阻塞主流程，失败静默处理）
+      syncUpdateTeamToCloud(team.id, { members: team.members }).catch(() => {});
     } catch (e) {
       console.error('入队写入数据库失败:', e);
       team.members = team.members.filter(m => m.userId !== userId);
@@ -109,6 +117,9 @@ async function joinTeam(teamId, userId) {
       team.fullNotified = true;
       try {
         await teamDao.updateTeam(team.id, { full_notified: 1 });
+        
+        // 异步同步到云库（不阻塞主流程，失败静默处理）
+        syncUpdateTeamToCloud(team.id, { fullNotified: true }).catch(() => {});
       } catch (e) {
         console.error('更新满员标记失败:', e);
       }
@@ -132,6 +143,10 @@ async function leaveTeam(teamId, userId) {
     if (team.members.length === 0) {
       await teamDao.deleteTeam(teamId);
       teams.splice(teamIndex, 1);
+      
+      // 异步同步到云库（删除队伍）
+      syncDeleteTeamFromCloud(teamId).catch(() => {});
+      
       broadcast({ type: 'team_deleted', data: { id: teamId } });
       return { dissolved: true };
     }
@@ -144,6 +159,12 @@ async function leaveTeam(teamId, userId) {
       members: JSON.stringify(team.members),
       leader_id: team.leaderId
     });
+    
+    // 异步同步到云库（更新 members 和 leaderId）
+    syncUpdateTeamToCloud(teamId, { 
+      members: team.members, 
+      leaderId: team.leaderId 
+    }).catch(() => {});
 
     broadcast({ type: 'team_updated', data: team });
     return { team };
@@ -221,6 +242,13 @@ async function changeTeamTime(teamId, leaderId, time, date) {
 
   try {
     await teamDao.updateTeam(teamId, { time: team.time, date: team.date });
+    
+    // 异步同步到云库（更新 time 和 date）
+    syncUpdateTeamToCloud(teamId, { 
+      time: team.time, 
+      date: team.date 
+    }).catch(() => {});
+    
     broadcast({ type: 'team_updated', data: team });
     return { team };
   } catch (e) {
@@ -242,6 +270,10 @@ async function dissolveTeam(teamId, adminId) {
   try {
     await teamDao.deleteTeam(teamId);
     teams.splice(teamIndex, 1);
+    
+    // 异步同步到云库（删除队伍）
+    syncDeleteTeamFromCloud(teamId).catch(() => {});
+    
     broadcast({ type: 'team_deleted', data: { id: teamId } });
     return { success: true };
   } catch (e) {
