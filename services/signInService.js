@@ -6,6 +6,7 @@
 const cache = require('../cache');
 const userDao = require('../dao/userDao');
 const { broadcast } = require('../websocket/broadcast');
+const { syncUpdateUserToCloud } = require('../utils/cloudSync');
 
 // 延迟引用避免循环依赖
 let _achievementService = null;
@@ -62,6 +63,15 @@ async function signIn(userId) {
       contribution_points: user.contributionPoints,
       consecutive_sign_ins: user.consecutiveSignIns
     });
+    
+    // 异步同步到云库（不阻塞主流程，失败静默处理）
+    syncUpdateUserToCloud(user.id, {
+      signInCount: user.signInCount,
+      lotteryCount: user.lotteryCount,
+      lastSignInDate: user.lastSignInDate.split('T')[0],
+      contributionPoints: user.contributionPoints,
+      consecutiveSignIns: user.consecutiveSignIns
+    }).catch(() => {});
 
     const result = {
       ok: true,

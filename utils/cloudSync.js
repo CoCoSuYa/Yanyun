@@ -145,6 +145,13 @@ async function syncUpdateUserToCloud(userId, updates) {
     if (updates.passwordHash !== undefined) cloudUpdates.password_hash = updates.passwordHash;
     if (updates.avatarUrl !== undefined) cloudUpdates.avatar_url = updates.avatarUrl;
     
+    // 签到相关字段
+    if (updates.signInCount !== undefined) cloudUpdates.sign_in_count = updates.signInCount;
+    if (updates.lotteryCount !== undefined) cloudUpdates.lottery_count = updates.lotteryCount;
+    if (updates.lastSignInDate !== undefined) cloudUpdates.last_sign_in_date = updates.lastSignInDate;
+    if (updates.contributionPoints !== undefined) cloudUpdates.contribution_points = updates.contributionPoints;
+    if (updates.consecutiveSignIns !== undefined) cloudUpdates.consecutive_sign_ins = updates.consecutiveSignIns;
+    
     const result = await db.collection('users').doc(userId).update(cloudUpdates);
     console.log(`[云同步] ✓ 用户 ${userId} 更新成功，更新数量: ${result.updated || 1}`);
   } catch (err) {
