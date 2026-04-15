@@ -152,6 +152,11 @@ async function syncUpdateUserToCloud(userId, updates) {
     if (updates.contributionPoints !== undefined) cloudUpdates.contribution_points = updates.contributionPoints;
     if (updates.consecutiveSignIns !== undefined) cloudUpdates.consecutive_sign_ins = updates.consecutiveSignIns;
     
+    // 掘境游戏相关字段
+    if (updates.juejinHighScore !== undefined) cloudUpdates.juejin_high_score = updates.juejinHighScore;
+    if (updates.juejinLastPlayed !== undefined) cloudUpdates.juejin_last_played = updates.juejinLastPlayed;
+    if (updates.juejinCompleted !== undefined) cloudUpdates.juejin_completed = updates.juejinCompleted;
+    
     const result = await db.collection('users').doc(userId).update(cloudUpdates);
     console.log(`[云同步] ✓ 用户 ${userId} 更新成功，更新数量: ${result.updated || 1}`);
   } catch (err) {

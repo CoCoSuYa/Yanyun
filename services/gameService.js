@@ -6,6 +6,7 @@
 const cache = require('../cache');
 const userDao = require('../dao/userDao');
 const { broadcast } = require('../websocket/broadcast');
+const { syncUpdateUserToCloud } = require('../utils/cloudSync');
 
 // 延迟引用避免循环依赖
 let _achievementService = null;
@@ -36,6 +37,13 @@ async function submitScore(userId, score) {
       juejin_last_played: new Date().toISOString().slice(0, 19).replace('T', ' '),
       contribution_points: user.contributionPoints
     });
+    
+    // 异步同步到云库（不阻塞主流程，失败静默处理）
+    syncUpdateUserToCloud(userId, {
+      juejinHighScore: updated ? score : user.juejinHighScore,
+      juejinLastPlayed: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      contributionPoints: user.contributionPoints
+    }).catch(() => {});
   } catch (e) {
     return { error: '保存失败', status: 500 };
   }
@@ -91,6 +99,11 @@ async function completeGame(userId) {
   user.juejinCompleted = true;
   try {
     await userDao.updateUser(userId, { juejin_completed: 1 });
+    
+    // 异步同步到云库（不阻塞主流程，失败静默处理）
+    syncUpdateUserToCloud(userId, {
+      juejinCompleted: true
+    }).catch(() => {});
   } catch (e) {
     return { error: '保存失败', status: 500 };
   }
