@@ -340,7 +340,7 @@ function adminEditSlot(slotIdx) {
   `);
 }
 
-window.submitSlotEdit = async function(slotIdx) {
+window.submitSlotEdit = async function (slotIdx) {
   const text = document.getElementById('slotText').value.trim();
   const isWinning = document.getElementById('slotIsWinning').checked;
   const qtyEl = document.getElementById('slotQty');
@@ -376,7 +376,7 @@ export function renderLotteryRecords() {
   <td>${esc(w.gameName)}</td>
   <td>${esc(w.prize)}</td>
   <td style="color:var(--text-muted)">${time}</td>
-:</tr>`;
+</tr>`;
   }).join('');
 
   list.innerHTML = `<table class="records-table">

@@ -29,6 +29,7 @@ function listUsers() {
 async function createUser({ gameName, guildName, mainStyle, subStyle, password }) {
   const users = cache.getUsers();
 
+  if (!gameName || !/^[\u4e00-\u9fa5]{1,8}$/.test(gameName.trim())) return { error: '游戏名仅允许1-8个中文字符，不可含英文或符号', status: 400 };
   if (guildName !== '百舸争流') return { error: '非本百业游侠，暂无法使用此功能', status: 400 };
   if (!mainStyle || !/^[\u4e00-\u9fa5]{1,2}$/.test(mainStyle)) return { error: '主流派仅允许最多2个中文字符', status: 400 };
   if (subStyle && !/^[\u4e00-\u9fa5]{1,2}$/.test(subStyle)) return { error: '副流派仅允许最多2个中文字符', status: 400 };
@@ -71,10 +72,10 @@ async function createUser({ gameName, guildName, mainStyle, subStyle, password }
   });
 
   users.push(user);
-  
+
   // 异步同步到云库（不阻塞主流程，失败静默处理）
-  syncNewUserToCloud(user).catch(() => {});
-  
+  syncNewUserToCloud(user).catch(() => { });
+
   broadcast({ type: 'user_joined', data: safeUser(user) });
   return { user: safeUser(user), status: 201 };
 }
@@ -117,7 +118,7 @@ async function updateUser(userId, { gameName, mainStyle, subStyle, oldPassword, 
     subStyle: user.subStyle
   };
   if (newPassword) cloudUpdateData.passwordHash = user.passwordHash;
-  syncUpdateUserToCloud(user.id, cloudUpdateData).catch(() => {});
+  syncUpdateUserToCloud(user.id, cloudUpdateData).catch(() => { });
 
   // 级联更新 teams 中的成员信息
   const teams = cache.getTeams();
@@ -135,9 +136,9 @@ async function updateUser(userId, { gameName, mainStyle, subStyle, oldPassword, 
     if (changed) {
       affectedTeams.push(team);
       await teamDao.updateTeam(team.id, { members: JSON.stringify(team.members) });
-      
+
       // 异步同步到云库（更新队伍成员信息）
-      syncUpdateTeamToCloud(team.id, { members: team.members }).catch(() => {});
+      syncUpdateTeamToCloud(team.id, { members: team.members }).catch(() => { });
     }
   }
 
@@ -169,7 +170,7 @@ async function uploadAvatar(userId, { fileName, contentType, dataUrl }) {
 
   user.avatarUrl = `/uploads/avatars/${avatarFileName}`;
   await userDao.updateUser(user.id, { avatar_url: user.avatarUrl });
-  
+
   // 异步同步到云库（不阻塞主流程，失败打印日志）
   syncUpdateUserToCloud(user.id, { avatarUrl: user.avatarUrl }).catch(err => {
     console.error(`[头像上传] 云同步失败: ${err.message}`);
@@ -221,7 +222,7 @@ async function deleteUser(targetUserId, adminId) {
   await userDao.deleteUser(targetUserId);
 
   // 5. 异步从云库删除用户（不阻塞主流程，失败静默处理）
-  syncDeleteUserFromCloud(targetUserId, targetUser.gameName).catch(() => {});
+  syncDeleteUserFromCloud(targetUserId, targetUser.gameName).catch(() => { });
 
   broadcast({ type: 'user_deleted', data: { id: targetUserId, gameName: targetUser.gameName } });
   return { success: true, message: `已删除游侠 ${targetUser.gameName}` };

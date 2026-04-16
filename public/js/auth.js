@@ -5,7 +5,7 @@ import { S } from './state.js';
 import { api } from './api.js';
 import { openModal, closeModal, toast, showGErr, setButtonLoading } from './ui.js';
 import { esc, saveUser } from './utils.js';
-import { updateMyBadge, renderUserList, forceRenderUserList } from './render.js';
+import { updateMyBadge, renderUserList, forceRenderUserList, renderTeams } from './render.js';
 
 // ---- 修改信息 ----
 export function showEditModal() {
@@ -182,6 +182,7 @@ export async function submitRegister() {
   const errEl = document.getElementById('r-err');
 
   if (!name) return showGErr(errEl, '游戏名不可为空');
+  if (!/^[\u4e00-\u9fa5]{1,8}$/.test(name)) return showGErr(errEl, '游戏名仅允许1-8个中文字符，不可含英文或符号');
   if (!guild) return showGErr(errEl, '百业名不可为空');
   if (guild !== '百舸争流') return showGErr(errEl, '非本百业游侠，暂无法使用此功能');
   if (!main) return showGErr(errEl, '主流派不可为空');
@@ -214,6 +215,7 @@ function onLoginSuccess(user) {
   closeModal();
   updateMyBadge();
   renderUserList();
+  renderTeams();
   toast(`欢迎，${user.gameName}！江湖在望`);
   if (S.pendingAction) {
     const fn = S.pendingAction; S.pendingAction = null;
@@ -255,12 +257,12 @@ export function showEditTimeModal(team) {
   `);
 }
 
-window.submitTeamTimeEdit = async function(teamId) {
+window.submitTeamTimeEdit = async function (teamId) {
   const newTime = document.getElementById('e-time-new').value;
   const errEl = document.getElementById('e-time-err');
   if (!newTime) return showGErr(errEl, '请选择时间');
   try {
-    await api('PUT', `/api/teams/${teamId}/time`, { adminId: S.user.id, time: newTime });
+    await api('PUT', `/api/teams/${teamId}/time`, { leaderId: S.user.id, time: newTime });
     closeModal();
     renderTeams();
     toast('开本时间已更新');

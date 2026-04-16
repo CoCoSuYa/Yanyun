@@ -58,6 +58,17 @@ async function deleteNotice(noticeId) {
   // 异步同步到云库（不阻塞主流程，失败静默处理）
   syncDeleteNoticeFromCloud(noticeId).catch(() => { });
 
+  // 清理所有用户的已读标记中已删除的告示ID
+  const users = cache.getUsers();
+  for (const user of users) {
+    if (user.readNoticeIds && user.readNoticeIds.includes(noticeId)) {
+      user.readNoticeIds = user.readNoticeIds.filter(id => id !== noticeId);
+      await userDao.updateUser(user.id, { read_notice_ids: JSON.stringify(user.readNoticeIds) });
+      // 异步同步到云库（不阻塞主流程，失败静默处理）
+      syncUpdateUserToCloud(user.id, { readNoticeIds: user.readNoticeIds }).catch(() => { });
+    }
+  }
+
   return { ok: true };
 }
 

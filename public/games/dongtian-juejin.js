@@ -7,7 +7,7 @@
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     const minerImage = new Image();
-    minerImage.src = 'https://636c-cloud1-3gvmh3i3fabb6c3b-1408953644.tcb.qcloud.la/img/dongtian-juejin-miner.png?sign=76ea02e1620d541fe51de9ba7b03b97a&t=1774593810';
+    minerImage.src = '/img/dongtian-juejin-miner.png';
 
     const scoreValue = document.getElementById('scoreValue');
     const timeValue = document.getElementById('timeValue');
@@ -387,7 +387,7 @@
         document.getElementById('finalTitle').textContent = '九重洞天通关';
         document.getElementById('finalSummary').textContent = `恭喜通关！总分 ${state.score} 分`;
         document.getElementById('finalOverlay').classList.remove('hidden'); saveScore();
-        if (currentUser && currentUser.id) apiCall('POST', '/api/games/juejin/complete', { userId: currentUser.id }).catch(() => {});
+        if (currentUser && currentUser.id) apiCall('POST', '/api/games/juejin/complete', { userId: currentUser.id }).catch(() => { });
     }
 
     async function saveScore() {

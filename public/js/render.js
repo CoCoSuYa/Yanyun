@@ -8,7 +8,15 @@ import { updateLazyLoading } from './images.js';
 
 export function getUserAvatar(u) {
   const url = u && u.avatarUrl && String(u.avatarUrl).trim() ? String(u.avatarUrl).trim() : '';
-  return url || 'img/default-avatar.jpg';
+  // 验证URL是否有效：必须是相对路径或绝对URL，不能是空字符串或无效字符
+  if (!url || url === 'null' || url === 'undefined' || url === '') {
+    return 'img/default-avatar.jpg';
+  }
+  // 如果是相对路径，确保以/或img/开头
+  if (!url.startsWith('/') && !url.startsWith('http') && !url.startsWith('img/')) {
+    return 'img/default-avatar.jpg';
+  }
+  return url;
 }
 
 export function getRankLabel(rank) {
