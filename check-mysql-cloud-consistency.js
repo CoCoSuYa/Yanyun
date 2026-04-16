@@ -371,6 +371,9 @@ function printRecordDiffs(name, diffsById, limit = 20) {
     console.log(`[内容] ${name}: 发现 ${diffsById.length} 条差异 ✗`);
     diffsById.slice(0, limit).forEach(item => {
         console.log(`  - 主键: ${item.id}`);
+        console.log(`    MySQL完整数据: ${JSON.stringify(item.mysqlFull, null, 2)}`);
+        console.log(`    Cloud完整数据: ${JSON.stringify(item.cloudFull, null, 2)}`);
+        console.log(`    字段差异:`);
         item.diffs.forEach(diff => {
             console.log(`      字段: ${diff.field}`);
             console.log(`        MySQL: ${JSON.stringify(diff.mysql)}`);
