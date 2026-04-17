@@ -213,21 +213,29 @@ export async function loadSuggestions() {
     msgUnreadState.hasUnreadSuggestion = hasUnread;
     updateMsgBadge();
 
-    container.innerHTML = `<div style="display:flex;flex-direction:column;gap:12px;">` + sugs.map(s => `
-    <div class="msg-item msg-item-suggestion ${s.isRead ? 'msg-item-read' : ''}">
+    // 为每个建议查找作者名字和格式化日期
+    const sugsWithAuthor = sugs.map(s => {
+      const author = S.users.find(u => u.id === s.authorId);
+      const authorName = author ? author.gameName : '未知用户';
+      const date = s.createdAt ? new Date(s.createdAt).toLocaleDateString('zh-CN') : '';
+      return { ...s, authorName, date };
+    });
+
+    container.innerHTML = `<div style="display:flex;flex-direction:column;gap:12px;">` + sugsWithAuthor.map(s => `
+    <div class="msg-item msg-item-suggestion ${s.isRead ? 'msg-item-read' : ''}" data-suggestion-id="${s.id}">
       <div class="msg-item-head-suggestion">
         <div class="msg-item-left">
-          <span class="msg-item-author">${esc(s.gameName)}</span>
+          <span class="msg-item-author">${esc(s.authorName)}</span>
           <span class="msg-item-date">${s.date}</span>
           ${!s.isRead ? '<span class="msg-unread-dot"></span>' : ''}
         </div>
         <div style="display:flex;gap:8px;">
-          <button class="msg-read-btn" onclick="markSuggestionRead(event, '${s._id}')" ${s.isRead ? 'disabled' : ''}>阅</button>
-          <button class="msg-delete-btn-top" onclick="deleteMsg(event, 'suggestions', '${s._id}')">删除</button>
+          <button class="msg-read-btn" onclick="markSuggestionRead(event, '${s.id}')" ${s.isRead ? 'disabled' : ''}>阅</button>
+          <button class="msg-delete-btn-top" onclick="deleteMsg(event, 'suggestions', '${s.id}')">删除</button>
         </div>
       </div>
       <div class="msg-item-content-preview" style="display:none;">${esc(s.content)}</div>
-      <div class="msg-item-content" onclick="openMsgDetail(this.parentElement, '建议详情')">${esc(s.content)}</div>
+      <div class="msg-item-content" onclick="openSuggestionDetail(event, '${s.id}')">${esc(s.content)}</div>
     </div>
     `).join('') + `</div>`;
   } catch (e) {
@@ -319,11 +327,80 @@ export async function markSuggestionRead(e, suggestionId) {
   if (!S.user || !S.user.isAdmin) return;
   try {
     await api('POST', `/api/suggestions/${suggestionId}/read`, { adminId: S.user.id });
-    loadSuggestions();
+    
+    // 更新UI状态
+    const suggestionEl = document.querySelector(`[data-suggestion-id="${suggestionId}"]`);
+    if (suggestionEl) {
+      suggestionEl.classList.add('msg-item-read');
+      const unreadDot = suggestionEl.querySelector('.msg-unread-dot');
+      if (unreadDot) unreadDot.remove();
+      const readBtn = suggestionEl.querySelector('.msg-read-btn');
+      if (readBtn) readBtn.disabled = true;
+    }
+    
+    // 重新检查未读状态
+    await checkUnreadMessages();
   } catch (err) {
     console.error('标记已读失败:', err);
     toast('标记失败');
   }
 }
 
+export function openSuggestionDetail(e, suggestionId) {
+  e.stopPropagation();
+  const el = e.target.closest('.msg-item');
+  if (!el) return;
+  
+  const previewEl = el.querySelector('.msg-item-content-preview');
+  if (!previewEl) return;
+  const content = previewEl.textContent;
+  if (!content || content.trim() === '') return;
+  
+  const formattedContent = esc(content).replace(/\n/g, '<br>');
+  
+  Swal.fire({
+    title: '建议详情',
+    html: `
+      <div style="text-align:left;white-space:pre-wrap;">${formattedContent}</div>
+      <div style="margin-top:20px;">
+        <button id="swalMarkReadBtn" class="swal2-confirm swal2-styled" style="background-color:#c8a45e;">标记已读</button>
+      </div>
+    `,
+    customClass: { popup: 'swal-dark' },
+    showConfirmButton: false,
+    showCloseButton: true,
+    didOpen: () => {
+      const markReadBtn = document.getElementById('swalMarkReadBtn');
+      if (markReadBtn) {
+        markReadBtn.onclick = async () => {
+          if (!S.user || !S.user.isAdmin) return;
+          try {
+            await api('POST', `/api/suggestions/${suggestionId}/read`, { adminId: S.user.id });
+            
+            // 更新UI状态
+            const suggestionEl = document.querySelector(`[data-suggestion-id="${suggestionId}"]`);
+            if (suggestionEl) {
+              suggestionEl.classList.add('msg-item-read');
+              const unreadDot = suggestionEl.querySelector('.msg-unread-dot');
+              if (unreadDot) unreadDot.remove();
+              const readBtn = suggestionEl.querySelector('.msg-read-btn');
+              if (readBtn) readBtn.disabled = true;
+            }
+            
+            // 重新检查未读状态
+            await checkUnreadMessages();
+            
+            Swal.close();
+            toast('已标记为已读');
+          } catch (err) {
+            console.error('标记已读失败:', err);
+            toast('标记失败');
+          }
+        };
+      }
+    }
+  });
+}
+
 window.markSuggestionRead = markSuggestionRead;
+window.openSuggestionDetail = openSuggestionDetail;
