@@ -93,10 +93,11 @@ export function openLottery() {
   renderUserLotterySummary();
   updateSpinButton();
 
+  const adminBtn = document.getElementById('lotteryTabAdmin');
+  if (adminBtn) adminBtn.style.display = amIAdmin() ? '' : 'none';
+
   const addCountBtn = document.getElementById('addCountBtn');
-  if (addCountBtn) {
-    addCountBtn.style.display = amIAdmin() ? 'inline-flex' : 'none';
-  }
+  if (addCountBtn) addCountBtn.style.display = 'none';
 }
 
 export function closeLottery() {
@@ -187,10 +188,11 @@ function renderLotteryShell() {
     <div class="lottery-tabs">
       <button id="lotteryTabDraw" class="lottery-tab-btn" onclick="switchLotteryTab('draw')">摇签</button>
       <button id="lotteryTabShop" class="lottery-tab-btn" onclick="switchLotteryTab('shop')">商城</button>
+      <button id="lotteryTabAdmin" class="lottery-tab-btn" style="display:none" onclick="switchLotteryTab('admin')">管理</button>
     </div>
 
     <div id="lotteryDrawPanel" class="lottery-tab-panel">
-      <div class="draw-layout draw-layout-wide">
+      <div class="draw-layout">
         <div class="draw-main-card">
           <div class="draw-scene" id="drawScene">
             <div class="draw-scene-glow"></div>
@@ -244,6 +246,28 @@ function renderLotteryShell() {
         <div id="shopItemList" class="shop-item-list"></div>
       </div>
     </div>
+
+    <div id="lotteryAdminPanel" class="lottery-tab-panel" style="display:none">
+      <div class="admin-layout">
+        <div class="admin-card">
+          <div class="admin-card-title">设定抽签次数</div>
+          <div class="admin-card-desc">为指定用户设定抽签次数（覆盖当前值）</div>
+          <div class="admin-form-body">
+            <div class="form-group">
+              <label for="adminUserSelect">选择用户：</label>
+              <select id="adminUserSelect" class="form-select">
+                <option value="">请选择用户</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="adminCountInput">设定次数：</label>
+              <input type="number" id="adminCountInput" class="form-input" min="0" placeholder="请输入次数" />
+            </div>
+            <button class="btn btn-primary" style="width:100%" onclick="submitAdminAddCount()">提交</button>
+          </div>
+        </div>
+      </div>
+    </div>
   `;
 
   const clearBannerBtnInner = document.getElementById('clearBannerBtnInner');
@@ -251,17 +275,25 @@ function renderLotteryShell() {
 }
 
 export function switchLotteryTab(tab) {
-  LOT.activeTab = tab === 'shop' ? 'shop' : 'draw';
+  LOT.activeTab = ['shop', 'admin'].includes(tab) ? tab : 'draw';
 
   const drawPanel = document.getElementById('lotteryDrawPanel');
   const shopPanel = document.getElementById('lotteryShopPanel');
+  const adminPanel = document.getElementById('lotteryAdminPanel');
   const drawBtn = document.getElementById('lotteryTabDraw');
   const shopBtn = document.getElementById('lotteryTabShop');
+  const adminBtn = document.getElementById('lotteryTabAdmin');
 
   if (drawPanel) drawPanel.style.display = LOT.activeTab === 'draw' ? 'block' : 'none';
   if (shopPanel) shopPanel.style.display = LOT.activeTab === 'shop' ? 'block' : 'none';
+  if (adminPanel) adminPanel.style.display = LOT.activeTab === 'admin' ? 'block' : 'none';
   if (drawBtn) drawBtn.classList.toggle('active', LOT.activeTab === 'draw');
   if (shopBtn) shopBtn.classList.toggle('active', LOT.activeTab === 'shop');
+  if (adminBtn) adminBtn.classList.toggle('active', LOT.activeTab === 'admin');
+
+  if (LOT.activeTab === 'admin') {
+    populateAdminUserSelect();
+  }
 
   renderUserLotterySummary();
   renderFortuneTable();
@@ -459,7 +491,7 @@ function showSpinResult(result) {
   updateSpinButton();
   renderShopList();
   renderLotteryRecords();
-  updateWinnerBanner();
+  if (isSpecial) updateWinnerBanner();
 }
 
 function setLotteryResult(content, type = '', isHTML = false) {
@@ -534,6 +566,8 @@ export async function redeemShopItem(itemId) {
 
     renderUserLotterySummary();
     renderShopList();
+    renderLotteryRecords();
+    updateWinnerBanner();
     toast(result.message || `已兑换${item.name}`);
   } catch (e) {
     toast(e.message || '兑换失败');
@@ -549,6 +583,55 @@ function syncAdminUserOptions() {
     const opt = Array.from(select.options).find(o => o.value === u.id);
     if (opt) opt.textContent = `${u.gameName} (当前${u.lotteryCount || 0}次)`;
   });
+}
+
+function populateAdminUserSelect() {
+  const select = document.getElementById('adminUserSelect');
+  if (!select) return;
+  select.innerHTML = '<option value="">请选择用户</option>';
+  S.users.forEach(u => {
+    const opt = document.createElement('option');
+    opt.value = u.id;
+    opt.textContent = `${u.gameName} (当前${u.lotteryCount || 0}次)`;
+    select.appendChild(opt);
+  });
+  const countInput = document.getElementById('adminCountInput');
+  if (countInput) countInput.value = '';
+}
+
+export async function submitAdminAddCount() {
+  const targetUserId = document.getElementById('adminUserSelect')?.value;
+  const count = parseInt(document.getElementById('adminCountInput')?.value, 10);
+
+  if (!targetUserId) {
+    toast('请选择用户');
+    return;
+  }
+  if (isNaN(count) || count < 0) {
+    toast('请输入有效的次数');
+    return;
+  }
+
+  showLoading('设定中...');
+  try {
+    const result = await api('POST', '/api/lottery/add-count', {
+      adminId: S.user.id,
+      targetUserId,
+      count
+    });
+    toast(`已将 ${result.gameName} 的抽签次数设定为 ${result.newCount} 次`);
+
+    const targetUser = S.users.find(u => u.id === targetUserId);
+    if (targetUser) targetUser.lotteryCount = result.newCount;
+    if (S.user && S.user.id === targetUserId) S.user.lotteryCount = result.newCount;
+    populateAdminUserSelect();
+    renderUserLotterySummary();
+    updateSpinButton();
+  } catch (e) {
+    toast(e.message || '操作失败');
+  } finally {
+    hideLoading();
+  }
 }
 
 // ---------- 中奖记录渲染 ----------
@@ -651,7 +734,10 @@ export function updateWinnerBanner() {
   const oneHourAgo = Date.now() - 3600 * 1000;
   const clearedAt = LOT.bannerClearedAt || 0;
   const cutoff = Math.max(oneHourAgo, clearedAt);
-  const recent = (LOT.winners || []).filter(w => new Date(w.timestamp).getTime() > cutoff);
+  const recent = (LOT.winners || []).filter(w => {
+    const isBannerWorthy = w.type === 'exchange' || w.fortune === SPECIAL_FORTUNE;
+    return isBannerWorthy && new Date(w.timestamp).getTime() > cutoff;
+  });
 
   if (!recent.length) {
     banner.style.display = 'none';
@@ -759,5 +845,6 @@ window.switchLotteryTab = switchLotteryTab;
 window.exchangeContributionDraw = exchangeContributionDraw;
 window.redeemShopItem = redeemShopItem;
 window.openLotteryPage = openLotteryPage;
+window.submitAdminAddCount = submitAdminAddCount;
 
 setInterval(updateWinnerBanner, 60000);

@@ -179,7 +179,7 @@
 
 .draw-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(300px, .9fr);
+  grid-template-columns: minmax(0, 1fr) minmax(280px, .7fr);
   gap: 14px;
 }
 
@@ -741,6 +741,40 @@
 .form-select option {
   background: var(--bg-card);
   color: var(--text);
+}
+
+/* ===== ADMIN TAB ===== */
+.admin-layout {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-card {
+  background: linear-gradient(180deg, rgba(70, 42, 16, .92), rgba(32, 18, 8, .96));
+  border: 1px solid rgba(200, 164, 94, .24);
+  border-radius: 12px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .22);
+  padding: 18px 20px;
+}
+
+.admin-card-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--gold-light);
+  letter-spacing: 2px;
+  margin-bottom: 6px;
+}
+
+.admin-card-desc {
+  font-size: 13px;
+  color: var(--text-sec);
+  margin-bottom: 18px;
+}
+
+.admin-form-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 /* ===== ANIMATION ===== */

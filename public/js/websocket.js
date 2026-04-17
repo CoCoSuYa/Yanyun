@@ -77,7 +77,8 @@ function onWSMsg(msg) {
       S.teams = S.teams.filter(t => t.id !== msg.data.id); renderTeams(); break;
     case 'lottery_winner':
       LOT.winners.push(msg.data);
-      if (!LOT.spinning) { updateWinnerBanner(); renderLotteryRecords(); }
+      updateWinnerBanner();
+      renderLotteryRecords();
       break;
     case 'lottery_banner_cleared': {
       LOT.bannerClearedAt = new Date(msg.data.clearedAt).getTime();

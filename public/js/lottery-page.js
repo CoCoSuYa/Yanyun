@@ -2,11 +2,11 @@
 // 抽签独立页面入口
 // ====================================================
 import { api, showLoading, hideLoading } from './api.js';
-import { S } from './state.js';
+import { S, amIAdmin } from './state.js';
 import { loadUser } from './utils.js';
 import {
     LOT, initLottery, updateSpinButton, renderSlotRing, redrawWheel, renderLotteryRecords,
-    adminClearBanner, adminClearWinners, submitAddCount, updateWinnerBanner,
+    adminClearBanner, adminClearWinners, submitAddCount, submitAdminAddCount, updateWinnerBanner,
     openAddCountModal, closeAddCountModal, switchLotteryTab,
     exchangeContributionDraw, redeemShopItem, handleSpin
 } from './lottery.js';
@@ -19,6 +19,7 @@ window.handleSpin = handleSpin;
 window.openAddCountModal = openAddCountModal;
 window.closeAddCountModal = closeAddCountModal;
 window.submitAddCount = submitAddCount;
+window.submitAdminAddCount = submitAdminAddCount;
 window.adminClearBanner = adminClearBanner;
 window.adminClearWinners = adminClearWinners;
 
@@ -50,6 +51,10 @@ async function init() {
         // 渲染抽签界面
         renderSlotRing();
         switchLotteryTab('draw');
+
+        // 管理员显示管理Tab
+        const adminBtn = document.getElementById('lotteryTabAdmin');
+        if (adminBtn) adminBtn.style.display = amIAdmin() ? '' : 'none';
 
         hideLoading();
     } catch (e) {
