@@ -1,0 +1,54 @@
+/* 抽签独立页面样式 */
+.lottery-page {
+    min-height: 100vh;
+    background: linear-gradient(180deg, #1a0f07, #0d0805);
+    padding: 20px;
+}
+
+.lottery-page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    max-width: 1200px;
+    margin: 0 auto 20px;
+    padding: 0 10px;
+}
+
+.lottery-back-btn {
+    background: rgba(200, 164, 94, .15);
+    border: 1px solid rgba(200, 164, 94, .3);
+    color: var(--gold-light);
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: .2s;
+}
+
+.lottery-back-btn:hover {
+    background: rgba(200, 164, 94, .25);
+    border-color: var(--gold);
+}
+
+.lottery-page-title {
+    font-size: 24px;
+    color: var(--gold-light);
+    letter-spacing: 4px;
+    margin: 0;
+}
+
+.lottery-content {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+@media (max-width: 768px) {
+    .lottery-page {
+        padding: 15px 10px;
+    }
+
+    .lottery-page-title {
+        font-size: 20px;
+        letter-spacing: 2px;
+    }
+}

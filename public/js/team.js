@@ -42,7 +42,7 @@ export function handleMyBadgeClick() {
   const contributionPoints = S.user.contributionPoints || 0;
   showPopup(fakeE, [
     { label: `贡献值：${contributionPoints}`, fn: null, isInfo: true },
-    { label: '前往抽签', fn: () => window.openLotteryPage() },
+    { label: '前往抽签', fn: () => window.location.href = '/lottery.html' },
     { label: '个人中心', fn: () => window.location.href = '/profile.html' },
     { label: '修改信息', fn: showEditModal },
     { label: '暂别江湖', danger: true, fn: doLogout },
