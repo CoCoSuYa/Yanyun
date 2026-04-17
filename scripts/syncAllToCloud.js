@@ -26,6 +26,12 @@ function parseJsonField(value, fallback) {
   return fallback;
 }
 
+function toIsoOrFallback(value, fallback = null) {
+  if (value === undefined || value === null || value === '') return fallback;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? fallback : d.toISOString();
+}
+
 // 初始化云开发
 function initCloud() {
   if (cloudDb) return cloudDb;
@@ -83,13 +89,15 @@ async function syncUserToCloud(user) {
     invite_log: parseJsonField(user.invite_log, {}),
     pending_invites: parseJsonField(user.pending_invites, []),
 
-    created_at: user.created_at ? new Date(user.created_at).toISOString() : new Date().toISOString(),
-    updated_at: user.updated_at ? new Date(user.updated_at).toISOString() : new Date().toISOString()
+    created_at: toIsoOrFallback(user.created_at, new Date().toISOString()),
+    updated_at: toIsoOrFallback(user.updated_at, new Date().toISOString())
   };
+
+  const { _id, ...updateDoc } = cloudDoc;
 
   // 先尝试更新，如果不存在则添加
   try {
-    const result = await cdb.collection('users').doc(user.id).update(cloudDoc);
+    const result = await cdb.collection('users').doc(user.id).update(updateDoc);
     if (result.updated > 0) {
       return { success: true, action: 'updated' };
     } else {
@@ -121,15 +129,17 @@ async function syncLotteryToCloud() {
     _id: 'singleton',
     slots: parseJsonField(lottery.slots, []),
     winners: parseJsonField(lottery.winners, []),
-    banner_cleared_at: lottery.banner_cleared_at ? new Date(lottery.banner_cleared_at).toISOString() : null,
-    last_clear: lottery.last_clear ? new Date(lottery.last_clear).toISOString() : null,
+    banner_cleared_at: toIsoOrFallback(lottery.banner_cleared_at),
+    last_clear: toIsoOrFallback(lottery.last_clear),
     lucky_draw_remaining: Number(lottery.lucky_draw_remaining || 0),
-    last_lucky_reset: lottery.last_lucky_reset ? new Date(lottery.last_lucky_reset).toISOString() : null,
-    updated_at: lottery.updated_at ? new Date(lottery.updated_at).toISOString() : new Date().toISOString()
+    last_lucky_reset: toIsoOrFallback(lottery.last_lucky_reset),
+    updated_at: toIsoOrFallback(lottery.updated_at, new Date().toISOString())
   };
 
+  const { _id, ...updateDoc } = cloudDoc;
+
   try {
-    const result = await cdb.collection('lottery').doc('singleton').update(cloudDoc);
+    const result = await cdb.collection('lottery').doc('singleton').update(updateDoc);
     if (result.updated > 0) {
       console.log('[全量同步] ✓ lottery 单例更新成功');
     } else {
@@ -152,12 +162,14 @@ async function syncSuggestionToCloud(suggestion) {
     _id: suggestion.id,
     content: suggestion.content,
     author_id: suggestion.author_id,
-    created_at: suggestion.created_at ? new Date(suggestion.created_at).toISOString() : new Date().toISOString(),
-    updated_at: suggestion.updated_at ? new Date(suggestion.updated_at).toISOString() : (suggestion.created_at ? new Date(suggestion.created_at).toISOString() : new Date().toISOString())
+    created_at: toIsoOrFallback(suggestion.created_at, new Date().toISOString()),
+    updated_at: toIsoOrFallback(suggestion.updated_at, toIsoOrFallback(suggestion.created_at, new Date().toISOString()))
   };
 
+  const { _id, ...updateDoc } = cloudDoc;
+
   try {
-    const result = await cdb.collection('suggestions').doc(suggestion.id).update(cloudDoc);
+    const result = await cdb.collection('suggestions').doc(suggestion.id).update(updateDoc);
     if (result.updated > 0) {
       return { success: true, action: 'updated' };
     }
