@@ -169,7 +169,7 @@ function renderLotteryShell() {
 
   root.innerHTML = `
     <div class="lottery-topbar lottery-topbar-compact">
-      <div class="lottery-stat-card lottery-stat-card-wide">
+      <div class="lottery-stat-card">
         <span class="lottery-stat-label">我的钱袋</span>
         <strong class="lottery-stat-main" id="lotteryCoinBalance">0 钱</strong>
         <span class="lottery-stat-sub" id="lotteryTotalCoins">累计求得 0 钱</span>
@@ -182,8 +182,8 @@ function renderLotteryShell() {
         <span class="lottery-stat-label">贡献值</span>
         <strong class="lottery-stat-main" id="lotteryContributionValue">0</strong>
       </div>
-      <button id="exchangeDrawBtn" class="btn btn-ghost lottery-exchange-btn lottery-exchange-btn-inline" onclick="exchangeContributionDraw()">1000贡献换1签</button>
     </div>
+    <button id="exchangeDrawBtn" class="btn btn-ghost lottery-exchange-btn" onclick="exchangeContributionDraw()">使用1000贡献兑换1次抽签</button>
 
     <div class="lottery-tabs">
       <button id="lotteryTabDraw" class="lottery-tab-btn" onclick="switchLotteryTab('draw')">摇签</button>
