@@ -4,7 +4,7 @@
 import { S, MOBILE_CONFIG } from './state.js';
 import { api } from './api.js';
 import { renderAll, updateMyBadge, renderUserList, renderTeams } from './render.js';
-import { redrawWheel, updateWinnerBanner, renderLotteryRecords, LOT } from './lottery.js';
+import { redrawWheel, updateWinnerBanner, renderLotteryRecords, syncLotteryState, LOT } from './lottery.js';
 import { toast } from './ui.js';
 import { saveUser } from './utils.js';
 
@@ -35,11 +35,13 @@ function onWSMsg(msg) {
     case 'init':
       S.users = msg.data.users; S.teams = msg.data.teams; renderAll();
       if (msg.data.lottery) {
-        LOT.slots = msg.data.lottery.slots || [];
         LOT.winners = msg.data.lottery.winners || [];
         LOT.bannerClearedAt = msg.data.lottery.bannerClearedAt
           ? new Date(msg.data.lottery.bannerClearedAt).getTime() : 0;
-        redrawWheel(); updateWinnerBanner();
+        syncLotteryState(msg.data.lottery);
+        redrawWheel();
+        updateWinnerBanner();
+        renderLotteryRecords();
       }
       break;
     case 'user_joined':
@@ -73,13 +75,6 @@ function onWSMsg(msg) {
     }
     case 'team_deleted':
       S.teams = S.teams.filter(t => t.id !== msg.data.id); renderTeams(); break;
-    case 'lottery_update':
-      LOT.slots = msg.data.slots || [];
-      redrawWheel(); break;
-    case 'lottery_slot_update':
-      if (LOT.slots[msg.data.slotIndex] !== undefined)
-        LOT.slots[msg.data.slotIndex].quantity = msg.data.quantity;
-      redrawWheel(); break;
     case 'lottery_winner':
       LOT.winners.push(msg.data);
       if (!LOT.spinning) { updateWinnerBanner(); renderLotteryRecords(); }
@@ -100,6 +95,10 @@ function onWSMsg(msg) {
         if (bt) { bt.style.animation = 'none'; bt.dataset.content = ''; }
       }
       document.getElementById('winnerBanner').style.display = 'none';
-      renderLotteryRecords(); break;
+      renderLotteryRecords();
+      break;
+    case 'lottery_state_update':
+      syncLotteryState(msg.data || {});
+      break;
   }
 }

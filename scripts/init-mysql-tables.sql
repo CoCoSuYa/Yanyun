@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS users (
   read_notice_ids JSON,
   read_suggestion_ids JSON,
   contribution_points INT DEFAULT 0,
+  coins INT DEFAULT 0,
+  total_coins_earned INT DEFAULT 0,
   consecutive_sign_ins INT DEFAULT 0,
   juejin_high_score INT DEFAULT 0,
   achievements JSON,
@@ -58,6 +60,8 @@ CREATE TABLE IF NOT EXISTS lottery (
   winners JSON NOT NULL,
   banner_cleared_at TIMESTAMP,
   last_clear TIMESTAMP,
+  lucky_draw_remaining INT DEFAULT 2,
+  last_lucky_reset TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

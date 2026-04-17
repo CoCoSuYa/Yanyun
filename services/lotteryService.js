@@ -1,133 +1,288 @@
-/**
- * 抽奖服务
- * 配置/抽签/清空/设定次数
- * 已去除：云同步
- */
 const cache = require('../cache');
 const userDao = require('../dao/userDao');
 const lotteryDao = require('../dao/lotteryDao');
-const { broadcast } = require('../websocket/broadcast');
+const { broadcast, safeUser } = require('../websocket/broadcast');
 const { isAdminUser } = require('../utils/password');
-const { syncUpdateLotteryToCloud } = require('../utils/cloudSync');
+const { syncUpdateLotteryToCloud, syncUpdateUserToCloud } = require('../utils/cloudSync');
+
+const SPECIAL_FORTUNE = '吉祥如意';
+const SPECIAL_REWARD = 60000;
+const CONTRIBUTION_COST_PER_DRAW = 1000;
+
+const FORTUNE_CONFIG = [
+  { key: '大凶', minCoins: 100, maxCoins: 150 },
+  { key: '中凶', minCoins: 150, maxCoins: 200 },
+  { key: '小凶', minCoins: 200, maxCoins: 300 },
+  { key: '小吉', minCoins: 300, maxCoins: 400 },
+  { key: '吉', minCoins: 400, maxCoins: 550 },
+  { key: '中吉', minCoins: 550, maxCoins: 750 },
+  { key: '大吉', minCoins: 750, maxCoins: 1000 }
+];
+
+const SHOP_ITEMS = [
+  { id: 'skin_6', name: '6元皮', price: 60000 },
+  { id: 'monthly_card', name: '月卡一张', price: 300000 },
+  { id: 'skin_68', name: '战令/68元皮', price: 680000 },
+  { id: 'skin_128', name: '128元皮', price: 1280000 },
+  { id: 'skin_258', name: '258元皮', price: 2580000 }
+];
 
 function getLottery() {
   const lottery = cache.getLottery();
-  return { slots: lottery.slots, winners: lottery.winners || [], bannerClearedAt: lottery.bannerClearedAt };
+  return {
+    fortunes: FORTUNE_CONFIG,
+    winners: lottery.winners || [],
+    bannerClearedAt: lottery.bannerClearedAt,
+    luckyDrawRemaining: Number(lottery.luckyDrawRemaining || 0),
+    shopItems: SHOP_ITEMS
+  };
 }
 
-async function updateSlot(adminId, idx, { text, quantity, isWinning }) {
-  const users = cache.getUsers();
-  const admin = users.find(u => u.id === adminId);
-  if (!isAdminUser(admin)) return { error: '非管理员，无此权限', status: 403 };
+function getShopItems() {
+  return SHOP_ITEMS;
+}
 
-  const lottery = cache.getLottery();
-  if (idx < 0 || idx >= lottery.slots.length) return { error: '格子不存在', status: 400 };
+function getShopItemById(itemId) {
+  return SHOP_ITEMS.find(item => item.id === itemId) || null;
+}
 
-  const oldSlot = { ...lottery.slots[idx] };
-  if (text !== undefined) lottery.slots[idx].text = String(text).substring(0, 8);
-  if (quantity !== undefined) lottery.slots[idx].quantity = parseInt(quantity);
-  if (isWinning !== undefined) lottery.slots[idx].isWinning = Boolean(isWinning);
+function randomInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
 
-  try {
-    await lotteryDao.updateLottery({ slots: JSON.stringify(lottery.slots) });
-    
-    // 异步同步到云库（不阻塞主流程，失败打印日志）
-    syncUpdateLotteryToCloud({ slots: lottery.slots }).catch(err => {
-      console.error(`[转盘配置] 云同步失败: ${err.message}`);
-    });
-    
-    broadcast({ type: 'lottery_update', data: { slots: lottery.slots } });
-    return { slot: lottery.slots[idx] };
-  } catch (e) {
-    console.error('更新签诗配置失败:', e);
-    lottery.slots[idx] = oldSlot;
-    return { error: '风云涌动，改运失败', status: 500 };
+function buildRecord({ user, type, fortune, coins, itemName }) {
+  const timestamp = new Date().toISOString();
+  if (type === 'exchange') {
+    return {
+      type,
+      gameName: user.gameName,
+      prize: itemName,
+      itemName,
+      costCoins: getShopItemByIdByName(itemName)?.price || 0,
+      timestamp
+    };
   }
+
+  return {
+    type: 'draw',
+    gameName: user.gameName,
+    prize: `${fortune} · ${coins}钱`,
+    fortune,
+    coins,
+    timestamp
+  };
 }
 
-async function spin(userId) {
+function getShopItemByIdByName(name) {
+  return SHOP_ITEMS.find(item => item.name === name) || null;
+}
+
+function pickFortune(lottery) {
+  const normalPool = [...FORTUNE_CONFIG];
+  const canHitSpecial = Number(lottery.luckyDrawRemaining || 0) > 0;
+
+  if (canHitSpecial) {
+    const roll = Math.random();
+    if (roll < 0.02) {
+      return { fortune: SPECIAL_FORTUNE, coins: SPECIAL_REWARD, isSpecial: true };
+    }
+  }
+
+  const picked = normalPool[Math.floor(Math.random() * normalPool.length)];
+  return {
+    fortune: picked.key,
+    coins: randomInt(picked.minCoins, picked.maxCoins),
+    isSpecial: false
+  };
+}
+
+async function syncUserLotteryState(user) {
+  syncUpdateUserToCloud(user.id, {
+    lotteryCount: user.lotteryCount,
+    contributionPoints: user.contributionPoints,
+    coins: user.coins,
+    totalCoinsEarned: user.totalCoinsEarned
+  }).catch(err => {
+    console.error(`[抽奖用户同步] 云同步失败: ${err.message}`);
+  });
+}
+
+async function draw(userId) {
   const users = cache.getUsers();
   const lottery = cache.getLottery();
   const user = users.find(u => u.id === userId);
   if (!user) return { error: '请先踏入江湖，方可抽签问天', status: 401 };
 
   if (!user.lotteryCount) user.lotteryCount = 0;
-  if (user.lotteryCount <= 0) return { error: '本周抽签次数已用尽，请待周一重置', status: 403 };
+  if (!user.coins) user.coins = 0;
+  if (!user.totalCoinsEarned) user.totalCoinsEarned = 0;
+  if (user.lotteryCount <= 0) return { error: '抽签次数不足，请先签到或兑换', status: 403 };
 
-  const winIdx = Math.floor(Math.random() * lottery.slots.length);
-  const slot = lottery.slots[winIdx];
-  user.lotteryCount--;
-
-  // 非中奖格
-  if (!slot.isWinning) {
-    try {
-      await userDao.updateUser(user.id, { lottery_count: user.lotteryCount });
-      return {
-        slotIndex: winIdx, won: false, prize: slot.text,
-        message: '江湖路远，此签未显贵气，游侠且再试一次',
-        remainingCount: user.lotteryCount
-      };
-    } catch (e) {
-      user.lotteryCount++;
-      return { error: '天机混乱，抽签未能落笔', status: 500 };
-    }
-  }
-
-  // 中奖格但奖品已空
-  if (slot.quantity === 0) {
-    try {
-      await userDao.updateUser(user.id, { lottery_count: user.lotteryCount });
-      return {
-        slotIndex: winIdx, won: false, prize: slot.text,
-        message: '此签缘分已尽，已被他人捷足先登，来日方长',
-        remainingCount: user.lotteryCount
-      };
-    } catch (e) {
-      user.lotteryCount++;
-      return { error: '天机混乱，抽签未能落笔', status: 500 };
-    }
-  }
-
-  // 中奖！扣减数量并记录
-  if (slot.quantity > 0) slot.quantity--;
-
-  const winner = {
-    gameName: user.gameName,
-    prize: slot.text,
-    slotIndex: winIdx,
-    timestamp: new Date().toISOString()
+  const oldState = {
+    lotteryCount: user.lotteryCount,
+    coins: user.coins,
+    totalCoinsEarned: user.totalCoinsEarned,
+    luckyDrawRemaining: lottery.luckyDrawRemaining,
+    winnersLength: lottery.winners.length
   };
-  lottery.winners.push(winner);
+
+  const result = pickFortune(lottery);
+  user.lotteryCount -= 1;
+  user.coins += result.coins;
+  user.totalCoinsEarned += result.coins;
+  if (result.isSpecial) {
+    lottery.luckyDrawRemaining = Math.max(0, Number(lottery.luckyDrawRemaining || 0) - 1);
+  }
+
+  const record = buildRecord({
+    user,
+    type: 'draw',
+    fortune: result.fortune,
+    coins: result.coins
+  });
+  lottery.winners.push(record);
 
   try {
+    await userDao.updateUser(user.id, {
+      lottery_count: user.lotteryCount,
+      coins: user.coins,
+      total_coins_earned: user.totalCoinsEarned
+    });
     await lotteryDao.updateLottery({
-      slots: JSON.stringify(lottery.slots),
-      winners: JSON.stringify(lottery.winners)
+      winners: JSON.stringify(lottery.winners),
+      lucky_draw_remaining: Number(lottery.luckyDrawRemaining || 0)
     });
-    await userDao.updateUser(user.id, { lottery_count: user.lotteryCount });
 
-    // 异步同步到云库（不阻塞主流程，失败打印日志）
-    syncUpdateLotteryToCloud({ 
-      slots: lottery.slots, 
-      winners: lottery.winners 
+    syncUserLotteryState(user);
+    syncUpdateLotteryToCloud({
+      winners: lottery.winners,
+      luckyDrawRemaining: Number(lottery.luckyDrawRemaining || 0)
     }).catch(err => {
-      console.error(`[用户抽奖] 云同步失败: ${err.message}`);
+      console.error(`[抽奖奖池同步] 云同步失败: ${err.message}`);
     });
 
-    broadcast({ type: 'lottery_slot_update', data: { slotIndex: winIdx, quantity: slot.quantity } });
-    broadcast({ type: 'lottery_winner', data: winner });
+    broadcast({ type: 'user_updated', data: safeUser(user) });
+    broadcast({
+      type: 'lottery_state_update',
+      data: {
+        luckyDrawRemaining: Number(lottery.luckyDrawRemaining || 0)
+      }
+    });
+    broadcast({ type: 'lottery_winner', data: record });
 
     return {
-      slotIndex: winIdx, won: true, prize: slot.text,
-      message: `签落天成！恭喜 ${user.gameName} 喜得「${slot.text}」！`,
-      remainingCount: user.lotteryCount
+      won: true,
+      fortune: result.fortune,
+      prize: `${result.coins}钱`,
+      coins: result.coins,
+      remainingCount: user.lotteryCount,
+      currentCoins: user.coins,
+      luckyDrawRemaining: Number(lottery.luckyDrawRemaining || 0),
+      message: result.isSpecial
+        ? `天命大开！${user.gameName} 抽中「${SPECIAL_FORTUNE}」，获得 ${SPECIAL_REWARD} 钱！`
+        : `签落天成！${user.gameName} 抽中「${result.fortune}」，获得 ${result.coins} 钱！`
     };
   } catch (e) {
-    if (slot.quantity >= 0) slot.quantity++;
-    lottery.winners.pop();
-    user.lotteryCount++;
+    user.lotteryCount = oldState.lotteryCount;
+    user.coins = oldState.coins;
+    user.totalCoinsEarned = oldState.totalCoinsEarned;
+    lottery.luckyDrawRemaining = oldState.luckyDrawRemaining;
+    lottery.winners.length = oldState.winnersLength;
     console.error('抽签写入数据库失败:', e);
-    return { error: '天机混乱，抽签未能落笔，请重拾竹片', status: 500 };
+    return { error: '天机混乱，抽签未能落笔，请稍后再试', status: 500 };
+  }
+}
+
+async function exchangeContributionForDraw(userId, times = 1) {
+  const users = cache.getUsers();
+  const user = users.find(u => u.id === userId);
+  if (!user) return { error: '用户不存在', status: 404 };
+
+  const drawTimes = parseInt(times, 10);
+  if (isNaN(drawTimes) || drawTimes <= 0) return { error: '兑换次数必须为正整数', status: 400 };
+
+  if (!user.contributionPoints) user.contributionPoints = 0;
+  if (!user.lotteryCount) user.lotteryCount = 0;
+
+  const cost = drawTimes * CONTRIBUTION_COST_PER_DRAW;
+  if (user.contributionPoints < cost) {
+    return { error: `贡献值不足，兑换${drawTimes}次需要${cost}贡献值`, status: 400 };
+  }
+
+  const oldContribution = user.contributionPoints;
+  const oldLotteryCount = user.lotteryCount;
+  user.contributionPoints -= cost;
+  user.lotteryCount += drawTimes;
+
+  try {
+    await userDao.updateUser(user.id, {
+      contribution_points: user.contributionPoints,
+      lottery_count: user.lotteryCount
+    });
+
+    syncUserLotteryState(user);
+    broadcast({ type: 'user_updated', data: safeUser(user) });
+
+    return {
+      ok: true,
+      exchangedTimes: drawTimes,
+      costContribution: cost,
+      remainingContribution: user.contributionPoints,
+      lotteryCount: user.lotteryCount,
+      message: `兑换成功，获得 ${drawTimes} 次抽签机会`
+    };
+  } catch (e) {
+    user.contributionPoints = oldContribution;
+    user.lotteryCount = oldLotteryCount;
+    console.error('贡献兑换抽签次数失败:', e);
+    return { error: '风云涌动，兑换失败', status: 500 };
+  }
+}
+
+async function redeemShopItem(userId, itemId) {
+  const users = cache.getUsers();
+  const lottery = cache.getLottery();
+  const user = users.find(u => u.id === userId);
+  if (!user) return { error: '用户不存在', status: 404 };
+
+  const item = getShopItemById(itemId);
+  if (!item) return { error: '商品不存在', status: 404 };
+
+  if (!user.coins) user.coins = 0;
+  if (user.coins < item.price) {
+    return { error: `钱余额不足，兑换「${item.name}」需要 ${item.price} 钱`, status: 400 };
+  }
+
+  const oldCoins = user.coins;
+  const oldWinnersLength = lottery.winners.length;
+  user.coins -= item.price;
+
+  const record = buildRecord({ user, type: 'exchange', itemName: item.name });
+  lottery.winners.push(record);
+
+  try {
+    await userDao.updateUser(user.id, { coins: user.coins });
+    await lotteryDao.updateLottery({ winners: JSON.stringify(lottery.winners) });
+
+    syncUserLotteryState(user);
+    syncUpdateLotteryToCloud({ winners: lottery.winners }).catch(err => {
+      console.error(`[商城兑换同步] 云同步失败: ${err.message}`);
+    });
+
+    broadcast({ type: 'user_updated', data: safeUser(user) });
+    broadcast({ type: 'lottery_winner', data: record });
+
+    return {
+      ok: true,
+      item,
+      remainingCoins: user.coins,
+      message: `兑换成功，已兑换「${item.name}」`
+    };
+  } catch (e) {
+    user.coins = oldCoins;
+    lottery.winners.length = oldWinnersLength;
+    console.error('商城兑换写入数据库失败:', e);
+    return { error: '风云涌动，兑换失败', status: 500 };
   }
 }
 
@@ -144,19 +299,16 @@ async function clearBanner(adminId) {
     await lotteryDao.updateLottery({
       banner_cleared_at: new Date(lottery.bannerClearedAt).toISOString().slice(0, 19).replace('T', ' ')
     });
-    
-    // 异步同步到云库（不阻塞主流程，失败打印日志）
-    syncUpdateLotteryToCloud({ 
-      bannerClearedAt: lottery.bannerClearedAt 
-    }).catch(err => {
+
+    syncUpdateLotteryToCloud({ bannerClearedAt: lottery.bannerClearedAt }).catch(err => {
       console.error(`[清空轮播] 云同步失败: ${err.message}`);
     });
-    
+
     broadcast({ type: 'lottery_banner_cleared', data: { clearedAt: lottery.bannerClearedAt } });
     return { ok: true };
   } catch (e) {
-    console.error('清空轮播失败:', e);
     lottery.bannerClearedAt = oldBannerClearedAt;
+    console.error('清空轮播失败:', e);
     return { error: '风云涌动，清理失败', status: 500 };
   }
 }
@@ -167,7 +319,7 @@ async function clearWinners(adminId) {
   if (!isAdminUser(admin)) return { error: '非管理员，无此权限', status: 403 };
 
   const lottery = cache.getLottery();
-  const oldWinners = lottery.winners;
+  const oldWinners = [...lottery.winners];
   const oldBanner = lottery.bannerClearedAt;
   const oldLastClear = lottery.lastClear;
 
@@ -181,23 +333,22 @@ async function clearWinners(adminId) {
       banner_cleared_at: new Date(lottery.bannerClearedAt).toISOString().slice(0, 19).replace('T', ' '),
       last_clear: new Date(lottery.lastClear).getTime()
     });
-    
-    // 异步同步到云库（不阻塞主流程，失败打印日志）
-    syncUpdateLotteryToCloud({ 
+
+    syncUpdateLotteryToCloud({
       winners: lottery.winners,
       bannerClearedAt: lottery.bannerClearedAt,
       lastClear: lottery.lastClear
     }).catch(err => {
       console.error(`[清空中奖记录] 云同步失败: ${err.message}`);
     });
-    
+
     broadcast({ type: 'lottery_winners_cleared', data: { bannerClearedAt: lottery.bannerClearedAt } });
     return { ok: true };
   } catch (e) {
-    console.error('清空中奖记录失败:', e);
     lottery.winners = oldWinners;
     lottery.bannerClearedAt = oldBanner;
     lottery.lastClear = oldLastClear;
+    console.error('清空中奖记录失败:', e);
     return { error: '风云涌动，清空失败', status: 500 };
   }
 }
@@ -210,7 +361,7 @@ async function setLotteryCount(adminId, targetUserId, count) {
   const targetUser = users.find(u => u.id === targetUserId);
   if (!targetUser) return { error: '目标用户不存在', status: 404 };
 
-  const setCount = parseInt(count);
+  const setCount = parseInt(count, 10);
   if (isNaN(setCount) || setCount < 0) return { error: '次数必须为非负整数', status: 400 };
 
   const oldCount = targetUser.lotteryCount || 0;
@@ -218,18 +369,27 @@ async function setLotteryCount(adminId, targetUserId, count) {
 
   try {
     await userDao.updateUser(targetUser.id, { lottery_count: targetUser.lotteryCount });
+    syncUserLotteryState(targetUser);
+    broadcast({ type: 'user_updated', data: safeUser(targetUser) });
     return { ok: true, gameName: targetUser.gameName, newCount: targetUser.lotteryCount };
   } catch (e) {
-    console.error('设定抽签次数失败:', e);
     targetUser.lotteryCount = oldCount;
+    console.error('设定抽签次数失败:', e);
     return { error: '风云涌动，操作失败', status: 500 };
   }
 }
 
 module.exports = {
+  CONTRIBUTION_COST_PER_DRAW,
+  FORTUNE_CONFIG,
+  SPECIAL_FORTUNE,
+  SPECIAL_REWARD,
+  SHOP_ITEMS,
   getLottery,
-  updateSlot,
-  spin,
+  getShopItems,
+  draw,
+  redeemShopItem,
+  exchangeContributionForDraw,
   clearBanner,
   clearWinners,
   setLotteryCount

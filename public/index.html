@@ -126,33 +126,14 @@
 
   <!-- 抽奖弹窗 -->
   <div id="lotteryOverlay" class="overlay" style="display:none" onclick="if(event.target===this)closeLottery()">
-    <div class="lottery-modal">
+    <div class="lottery-modal lottery-modal-wide">
       <div class="lottery-hd">
         <span class="lottery-title">天命签诗</span>
         <button id="addCountBtn" class="lottery-add-count-btn" onclick="openAddCountModal()" title="设定次数"
           style="display:none">➕</button>
         <button class="lottery-close" onclick="closeLottery()" title="关闭">✕</button>
       </div>
-      <!-- 方格轨道（JS 动态注入 24 个 .slot-cell）-->
-      <div id="slotRingWrap" class="slot-ring-wrap">
-        <div class="slot-center" id="slotCenter">
-          <span class="slot-center-title">天　命</span>
-          <span class="slot-center-sub">签诗</span>
-        </div>
-      </div>
-      <div id="lotteryResult" class="lottery-result" style="display:none"></div>
-      <button id="spinBtn" class="btn btn-primary" style="width:100%;margin-bottom:8px"
-        onclick="handleSpin()">求签问天</button>
-      <div id="adminWheelHint" class="admin-wheel-hint" style="display:none">管理员：点击格子可编辑奖品</div>
-      <!-- 中奖记录 -->
-      <div class="records-section" id="recordsSection">
-        <div class="records-hd">
-          <span class="records-title">⚔ 本周得道者</span>
-          <button id="clearRecordsBtn" class="btn btn-ghost" style="display:none;font-size:11px;padding:3px 10px"
-            onclick="adminClearWinners()">清空记录</button>
-        </div>
-        <div id="recordsList"></div>
-      </div>
+      <div id="lotteryContent" class="lottery-content"></div>
     </div>
   </div>
 

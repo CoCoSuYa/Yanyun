@@ -132,6 +132,8 @@ function normalizeUserRecord(user) {
         readNoticeIds: stableSort(Array.isArray(user.readNoticeIds) ? user.readNoticeIds.filter(v => v != null) : []),
         readSuggestionIds: stableSort(Array.isArray(user.readSuggestionIds) ? user.readSuggestionIds.filter(v => v != null) : []),
         contributionPoints: Number(user.contributionPoints ?? 0),
+        coins: Number(user.coins ?? 0),
+        totalCoinsEarned: Number(user.totalCoinsEarned ?? 0),
         consecutiveSignIns: Number(user.consecutiveSignIns ?? 0),
         juejinHighScore: Number(user.juejinHighScore ?? 0),
         achievements: stableSort(Array.isArray(user.achievements) ? user.achievements : []),
@@ -191,6 +193,8 @@ function normalizeLotteryRecord(lottery) {
         winners: stableSort(Array.isArray(lottery.winners) ? lottery.winners : []),
         bannerClearedAt: normalizeDate(lottery.bannerClearedAt),
         lastClear: normalizeDate(lottery.lastClear),
+        luckyDrawRemaining: Number(lottery.luckyDrawRemaining ?? 0),
+        lastLuckyReset: normalizeDate(lottery.lastLuckyReset),
         updatedAt: normalizeDate(lottery.updatedAt)
     };
 }
@@ -211,6 +215,8 @@ function normalizeCloudUserRecord(doc) {
         readNoticeIds: doc.read_notice_ids,
         readSuggestionIds: doc.read_suggestion_ids,
         contributionPoints: doc.contribution_points,
+        coins: doc.coins,
+        totalCoinsEarned: doc.total_coins_earned,
         consecutiveSignIns: doc.consecutive_sign_ins,
         juejinHighScore: doc.juejin_high_score,
         achievements: doc.achievements,
@@ -269,6 +275,8 @@ function normalizeCloudLotteryRecord(doc) {
         winners: doc?.winners,
         bannerClearedAt: doc?.banner_cleared_at,
         lastClear: doc?.last_clear,
+        luckyDrawRemaining: doc?.lucky_draw_remaining,
+        lastLuckyReset: doc?.last_lucky_reset,
         updatedAt: doc?.updated_at
     });
 }
@@ -426,6 +434,8 @@ async function loadMysqlLottery() {
     const lottery = toLotteryObject(row);
     return normalizeLotteryRecord({
         ...lottery,
+        luckyDrawRemaining: lottery.luckyDrawRemaining,
+        lastLuckyReset: lottery.lastLuckyReset,
         updatedAt: row?.updated_at || null
     });
 }

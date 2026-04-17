@@ -84,6 +84,8 @@ function toCamelCaseUser(u) {
     signInCount: u.sign_in_count,
     lastSignInDate: u.last_sign_in_date,
     lotteryCount: u.lottery_count,
+    coins: Number(u.coins || 0),
+    totalCoinsEarned: Number(u.total_coins_earned || 0),
     readNoticeIds: parseJSON(u.read_notice_ids, []),
     readSuggestionIds: parseJSON(u.read_suggestion_ids, []),
     juejinHighScore: u.juejin_high_score,
@@ -144,12 +146,16 @@ function toLotteryObject(mysqlLottery) {
     slots: parseJSON(mysqlLottery.slots, []),
     winners: parseJSON(mysqlLottery.winners, []),
     bannerClearedAt: mysqlLottery.banner_cleared_at,
-    lastClear: mysqlLottery.last_clear || null
+    lastClear: mysqlLottery.last_clear || null,
+    luckyDrawRemaining: Number(mysqlLottery.lucky_draw_remaining || 0),
+    lastLuckyReset: mysqlLottery.last_lucky_reset || null
   } : {
-    slots: Array(16).fill({ text: '谢谢参与', quantity: -1, isWinning: false }),
+    slots: [],
     winners: [],
     bannerClearedAt: new Date(0).toISOString(),
-    lastClear: null
+    lastClear: null,
+    luckyDrawRemaining: 2,
+    lastLuckyReset: null
   };
 }
 

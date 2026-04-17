@@ -30,7 +30,13 @@ function initWebSocket(wss) {
       data: {
         users: cache.getUsers().map(safeUser),
         teams: cache.getTeams(),
-        lottery: { slots: lottery.slots, winners: lottery.winners || [], bannerClearedAt: lottery.bannerClearedAt }
+        lottery: {
+          slots: lottery.slots,
+          winners: lottery.winners || [],
+          bannerClearedAt: lottery.bannerClearedAt,
+          luckyDrawRemaining: Number(lottery.luckyDrawRemaining || 0),
+          lastLuckyReset: lottery.lastLuckyReset || null
+        }
       }
     }));
     ws.on('error', () => { });

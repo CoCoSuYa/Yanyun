@@ -57,6 +57,8 @@ async function syncNewUserToCloud(user) {
       read_notice_ids: user.readNoticeIds || [],
       read_suggestion_ids: user.readSuggestionIds || [],
       contribution_points: user.contributionPoints || 0,
+      coins: user.coins || 0,
+      total_coins_earned: user.totalCoinsEarned || 0,
       consecutive_sign_ins: user.consecutiveSignIns || 0,
       juejin_high_score: user.juejinHighScore || 0,
       achievements: user.achievements || [],
@@ -156,6 +158,8 @@ async function syncUpdateUserToCloud(userId, updates) {
     if (updates.lotteryCount !== undefined) cloudUpdates.lottery_count = updates.lotteryCount;
     if (updates.lastSignInDate !== undefined) cloudUpdates.last_sign_in_date = updates.lastSignInDate;
     if (updates.contributionPoints !== undefined) cloudUpdates.contribution_points = updates.contributionPoints;
+    if (updates.coins !== undefined) cloudUpdates.coins = updates.coins;
+    if (updates.totalCoinsEarned !== undefined) cloudUpdates.total_coins_earned = updates.totalCoinsEarned;
     if (updates.consecutiveSignIns !== undefined) cloudUpdates.consecutive_sign_ins = updates.consecutiveSignIns;
 
     // 掘境游戏相关字段
@@ -337,6 +341,8 @@ async function syncUpdateLotteryToCloud(updates) {
     if (updates.winners !== undefined) cloudUpdates.winners = updates.winners;
     if (updates.bannerClearedAt !== undefined) cloudUpdates.banner_cleared_at = updates.bannerClearedAt;
     if (updates.lastClear !== undefined) cloudUpdates.last_clear = updates.lastClear;
+    if (updates.luckyDrawRemaining !== undefined) cloudUpdates.lucky_draw_remaining = updates.luckyDrawRemaining;
+    if (updates.lastLuckyReset !== undefined) cloudUpdates.last_lucky_reset = updates.lastLuckyReset;
 
     // lottery 表是单例，固定 _id 为 'singleton'
     const result = await db.collection('lottery').doc('singleton').update(cloudUpdates);

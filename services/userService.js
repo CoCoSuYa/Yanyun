@@ -51,6 +51,8 @@ async function createUser({ gameName, guildName, mainStyle, subStyle, password }
     readNoticeIds: [],
     readSuggestionIds: [],
     contributionPoints: 0,
+    coins: 0,
+    totalCoinsEarned: 0,
     consecutiveSignIns: 0
   };
 
@@ -66,6 +68,8 @@ async function createUser({ gameName, guildName, mainStyle, subStyle, password }
     lottery_count: 1,
     sign_in_count: 0,
     contribution_points: 0,
+    coins: 0,
+    total_coins_earned: 0,
     consecutive_sign_ins: 0,
     juejin_high_score: 0,
     juejin_completed: false
