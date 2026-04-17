@@ -229,10 +229,7 @@ export async function loadSuggestions() {
           <span class="msg-item-date">${s.date}</span>
           ${!s.isRead ? '<span class="msg-unread-dot"></span>' : ''}
         </div>
-        <div style="display:flex;gap:8px;">
-          <button class="msg-read-btn" onclick="markSuggestionRead(event, '${s.id}')" ${s.isRead ? 'disabled' : ''}>阅</button>
-          <button class="msg-delete-btn-top" onclick="deleteMsg(event, 'suggestions', '${s.id}')">删除</button>
-        </div>
+        <button class="msg-delete-btn-top" onclick="deleteMsg(event, 'suggestions', '${s.id}')">删除</button>
       </div>
       <div class="msg-item-content-preview" style="display:none;">${esc(s.content)}</div>
       <div class="msg-item-content" onclick="openSuggestionDetail(event, '${s.id}')">${esc(s.content)}</div>
@@ -363,12 +360,12 @@ export function openSuggestionDetail(e, suggestionId) {
     html: `
       <div style="text-align:left;white-space:pre-wrap;">${formattedContent}</div>
       <div style="margin-top:20px;">
-        <button id="swalMarkReadBtn" class="swal2-confirm swal2-styled" style="background-color:#c8a45e;">标记已读</button>
+        <button id="swalMarkReadBtn" class="swal2-confirm swal2-styled" style="background-color:#c8a45e;">阅</button>
       </div>
     `,
     customClass: { popup: 'swal-dark' },
     showConfirmButton: false,
-    showCloseButton: true,
+    showCloseButton: false,
     didOpen: () => {
       const markReadBtn = document.getElementById('swalMarkReadBtn');
       if (markReadBtn) {
@@ -383,8 +380,6 @@ export function openSuggestionDetail(e, suggestionId) {
               suggestionEl.classList.add('msg-item-read');
               const unreadDot = suggestionEl.querySelector('.msg-unread-dot');
               if (unreadDot) unreadDot.remove();
-              const readBtn = suggestionEl.querySelector('.msg-read-btn');
-              if (readBtn) readBtn.disabled = true;
             }
             
             // 重新检查未读状态
