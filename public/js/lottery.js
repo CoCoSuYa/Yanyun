@@ -758,10 +758,6 @@ function fortuneToneClass(fortune) {
   }
 }
 
-export function openLotteryPage() {
-  openLottery();
-}
-
 window.switchLotteryTab = switchLotteryTab;
 window.exchangeContributionDraw = exchangeContributionDraw;
 window.redeemShopItem = redeemShopItem;
