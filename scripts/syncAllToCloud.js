@@ -95,7 +95,7 @@ async function syncUserToCloud(user) {
 
 async function syncLotteryToCloud() {
   const cdb = initCloud();
-  const [rows] = await db.query('SELECT * FROM lottery LIMIT 1');
+  const rows = await db.query('SELECT * FROM lottery LIMIT 1');
   const lottery = rows[0];
 
   if (!lottery) {
@@ -137,7 +137,7 @@ async function main() {
   console.log('[全量同步] 时间:', new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }));
 
   try {
-    const [users] = await db.query('SELECT * FROM users ORDER BY created_at');
+    const users = await db.query('SELECT * FROM users ORDER BY created_at');
     console.log(`[全量同步] 共 ${users.length} 个用户待同步\n`);
 
     let success = 0;
