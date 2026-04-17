@@ -116,41 +116,6 @@
   <!-- 背景音乐 -->
   <audio id="bgmAudio" src="" loop preload="none" style="display:none;"></audio>
 
-  <!-- 抽奖弹窗 -->
-  <div id="lotteryOverlay" class="overlay" style="display:none" onclick="if(event.target===this)closeLottery()">
-    <div class="lottery-modal lottery-modal-wide">
-      <div class="lottery-hd">
-        <button id="addCountBtn" class="lottery-add-count-btn" onclick="openAddCountModal()" title="设定次数"
-          style="display:none">➕</button>
-        <button class="lottery-close" onclick="closeLottery()" title="关闭">✕</button>
-      </div>
-      <div id="lotteryContent" class="lottery-content"></div>
-    </div>
-  </div>
-
-  <!-- 设定抽签次数弹窗 -->
-  <div id="addCountOverlay" class="overlay" style="display:none" onclick="if(event.target===this)closeAddCountModal()">
-    <div class="add-count-modal">
-      <div class="add-count-hd">
-        <span class="add-count-title">设定抽签次数</span>
-        <button class="add-count-close" onclick="closeAddCountModal()" title="关闭">✕</button>
-      </div>
-      <div class="add-count-body">
-        <div class="form-group">
-          <label for="targetUserSelect">选择用户：</label>
-          <select id="targetUserSelect" class="form-select">
-            <option value="">请选择用户</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="addCountInput">设定次数：</label>
-          <input type="number" id="addCountInput" class="form-input" min="0" placeholder="请输入次数" />
-        </div>
-        <button class="btn btn-primary" style="width:100%" onclick="submitAddCount()">提交</button>
-      </div>
-    </div>
-  </div>
-
   <!-- 签到浮窗 -->
   <div id="signInFloat" class="sign-in-float" style="display:none">
     <button id="signInBtn" class="sign-in-btn" onclick="doSignIn()">
