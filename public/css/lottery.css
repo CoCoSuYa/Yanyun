@@ -85,8 +85,12 @@
 }
 
 .lottery-topbar-compact {
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: stretch;
+}
+
+.lottery-topbar-compact > .lottery-stat-card {
+  width: 100%;
 }
 
 .lottery-stat-card,
