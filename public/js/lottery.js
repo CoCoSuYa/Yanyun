@@ -172,7 +172,6 @@ function renderLotteryShell() {
       <div class="lottery-stat-card">
         <span class="lottery-stat-label">我的钱袋</span>
         <strong class="lottery-stat-main" id="lotteryCoinBalance">0 钱</strong>
-        <span class="lottery-stat-sub" id="lotteryTotalCoins">累计求得 0 钱</span>
       </div>
       <div class="lottery-stat-card">
         <span class="lottery-stat-label">抽签次数</span>
@@ -307,7 +306,6 @@ function renderLuckyRemaining() {
 
 function renderUserLotterySummary() {
   const coinBalance = Number(S.user?.coins || 0);
-  const totalCoins = Number(S.user?.totalCoinsEarned || 0);
   const lotteryCount = Number(S.user?.lotteryCount || 0);
   const contributionPoints = Number(S.user?.contributionPoints || 0);
 
@@ -316,9 +314,6 @@ function renderUserLotterySummary() {
     const el = document.getElementById(id);
     if (el) el.textContent = `${coinBalance} 钱`;
   });
-
-  const totalEl = document.getElementById('lotteryTotalCoins');
-  if (totalEl) totalEl.textContent = `累计求得 ${totalCoins} 钱`;
 
   const countEl = document.getElementById('lotteryCountValue');
   if (countEl) countEl.textContent = String(lotteryCount);

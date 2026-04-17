@@ -275,7 +275,7 @@ async function redeemShopItem(userId, itemId) {
     return {
       ok: true,
       item,
-      remainingCoins: user.coins,
+      currentCoins: user.coins,
       message: `兑换成功，已兑换「${item.name}」`
     };
   } catch (e) {
