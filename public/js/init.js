@@ -139,11 +139,8 @@ async function init() {
   // 读取分享链接参数
   const params = new URLSearchParams(location.search);
   const joinParam = params.get('join');
-  const openLotteryView = params.get('view') === 'lottery';
   if (joinParam) {
     S.pendingJoin = joinParam;
-  }
-  if (joinParam || openLotteryView) {
     history.replaceState({}, '', location.pathname);
   }
   console.log(`[性能] 参数处理完成: ${(performance.now() - t0).toFixed(2)}ms`);
@@ -206,11 +203,7 @@ async function init() {
       checkUnreadMessages();
       showLatestUnreadNotice();
     }
-    initLottery()
-      .then(() => {
-        if (openLotteryView) openLottery();
-      })
-      .catch(e => console.warn('抽奖初始化失败:', e));
+    initLottery().catch(e => console.warn('抽奖初始化失败:', e));
     initBgm().catch(e => console.warn('BGM初始化失败:', e));
   }, 300);
 }

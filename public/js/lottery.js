@@ -758,8 +758,13 @@ function fortuneToneClass(fortune) {
   }
 }
 
+export function openLotteryPage() {
+  openLottery();
+}
+
 window.switchLotteryTab = switchLotteryTab;
 window.exchangeContributionDraw = exchangeContributionDraw;
 window.redeemShopItem = redeemShopItem;
+window.openLotteryPage = openLotteryPage;
 
 setInterval(updateWinnerBanner, 60000);

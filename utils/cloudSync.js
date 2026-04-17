@@ -364,6 +364,38 @@ async function syncUpdateLotteryToCloud(updates) {
   }
 }
 
+/**
+ * 删除建议时同步删除云库数据（失败不影响主流程）
+ * @param {string} suggestionId - 建议 ID
+ */
+async function syncDeleteSuggestionFromCloud(suggestionId) {
+  const db = initCloud();
+  if (!db) {
+    console.warn(`[云同步] 跳过删除建议 ${suggestionId}：云开发未配置`);
+    return;
+  }
+
+  console.log(`[云同步] 开始从云库删除建议 ${suggestionId}...`);
+
+  try {
+    const result = await db.collection('suggestions').doc(suggestionId).remove();
+
+    if (result.deleted === 0) {
+      console.error(`[云同步] ✗ 建议 ${suggestionId} 删除失败：云库中不存在该文档（deleted=0）`);
+    } else {
+      console.log(`[云同步] ✓ 建议 ${suggestionId} 已从云库删除，删除数量: ${result.deleted}`);
+    }
+  } catch (err) {
+    console.error(`[云同步] ✗ 建议 ${suggestionId} 从云库删除失败`);
+    console.error(`[云同步] 错误类型: ${err.name || 'Unknown'}`);
+    console.error(`[云同步] 错误信息: ${err.message}`);
+    console.error(`[云同步] 错误代码: ${err.code || 'N/A'}`);
+    if (err.stack) {
+      console.error(`[云同步] 错误堆栈:\n${err.stack.split('\n').slice(0, 5).join('\n')}`);
+    }
+  }
+}
+
 module.exports = {
   syncNewUserToCloud,
   syncUpdateUserToCloud,
@@ -371,5 +403,6 @@ module.exports = {
   syncNewTeamToCloud,
   syncUpdateTeamToCloud,
   syncDeleteTeamFromCloud,
-  syncUpdateLotteryToCloud
+  syncUpdateLotteryToCloud,
+  syncDeleteSuggestionFromCloud
 };

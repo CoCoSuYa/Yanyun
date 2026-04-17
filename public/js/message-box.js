@@ -172,13 +172,13 @@ export async function loadNotices() {
     updateMsgBadge();
 
     container.innerHTML = notices.map(n => `
-    <div class="msg-item ${n.isRead ? 'msg-item-read' : ''}" onclick="openMsgDetail(this, '告示详情'); markMsgAsRead('notices'); markAsRead('notices', '${n.id}');">
+    <div class="msg-item ${n.isRead ? 'msg-item-read' : ''}">
       <div class="msg-item-head">
         <span class="msg-item-title">${esc(n.title || '无标题')}</span>
         ${!n.isRead ? '<span class="msg-unread-dot"></span>' : ''}
       </div>
       <div class="msg-item-content-preview" style="display:none;">${esc(n.content)}</div>
-      <div class="msg-item-content">${esc(n.content)}</div>
+      <div class="msg-item-content" onclick="openMsgDetail(this.parentElement, '告示详情'); markMsgAsRead('notices'); markAsRead('notices', '${n.id}');">${esc(n.content)}</div>
       ${isAdmin ? `<button class="msg-delete-btn" style="display:block;" onclick="deleteMsg(event, 'notices', '${n.id}')">删除</button>` : ''}
     </div>
     `).join('');
@@ -214,17 +214,20 @@ export async function loadSuggestions() {
     updateMsgBadge();
 
     container.innerHTML = `<div style="display:flex;flex-direction:column;gap:12px;">` + sugs.map(s => `
-    <div class="msg-item msg-item-suggestion ${s.isRead ? 'msg-item-read' : ''}" onclick="openMsgDetail(this, '建议详情'); markMsgAsRead('suggestions'); markAsRead('suggestions', '${s._id}');">
+    <div class="msg-item msg-item-suggestion ${s.isRead ? 'msg-item-read' : ''}">
       <div class="msg-item-head-suggestion">
         <div class="msg-item-left">
           <span class="msg-item-author">${esc(s.gameName)}</span>
           <span class="msg-item-date">${s.date}</span>
           ${!s.isRead ? '<span class="msg-unread-dot"></span>' : ''}
         </div>
-        <button class="msg-delete-btn-top" onclick="deleteMsg(event, 'suggestions', '${s._id}')">删除</button>
+        <div style="display:flex;gap:8px;">
+          <button class="msg-read-btn" onclick="markSuggestionRead(event, '${s._id}')" ${s.isRead ? 'disabled' : ''}>阅</button>
+          <button class="msg-delete-btn-top" onclick="deleteMsg(event, 'suggestions', '${s._id}')">删除</button>
+        </div>
       </div>
       <div class="msg-item-content-preview" style="display:none;">${esc(s.content)}</div>
-      <div class="msg-item-content">${esc(s.content)}</div>
+      <div class="msg-item-content" onclick="openMsgDetail(this.parentElement, '建议详情')">${esc(s.content)}</div>
     </div>
     `).join('') + `</div>`;
   } catch (e) {
@@ -302,14 +305,25 @@ export function openMsgDetail(el, title) {
   const content = previewEl.textContent;
   if (!content || content.trim() === '') return;
   const formattedContent = esc(content).replace(/\n/g, '<br>');
-  const isSuggestion = title.includes('建议');
   Swal.fire({
     title: title,
     html: `<div style="text-align:left;white-space:pre-wrap;">${formattedContent}</div>`,
     customClass: { popup: 'swal-dark' },
-    confirmButtonText: '阅',
+    confirmButtonText: '关闭',
     confirmButtonColor: '#c8a45e'
-  }).then(() => {
-    if (isSuggestion) loadSuggestions(); else loadNotices();
   });
 }
+
+export async function markSuggestionRead(e, suggestionId) {
+  e.stopPropagation();
+  if (!S.user || !S.user.isAdmin) return;
+  try {
+    await api('POST', `/api/suggestions/${suggestionId}/read`, { adminId: S.user.id });
+    loadSuggestions();
+  } catch (err) {
+    console.error('标记已读失败:', err);
+    toast('标记失败');
+  }
+}
+
+window.markSuggestionRead = markSuggestionRead;
