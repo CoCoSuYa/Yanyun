@@ -4,6 +4,7 @@
 import { api, showLoading, hideLoading } from './api.js';
 import { S, amIAdmin } from './state.js';
 import { loadUser } from './utils.js';
+import { connectWS } from './websocket.js';
 import {
     LOT, initLottery, updateSpinButton, renderSlotRing, redrawWheel, renderLotteryRecords,
     adminClearBanner, adminClearWinners, submitAddCount, submitAdminAddCount, updateWinnerBanner,
@@ -55,6 +56,9 @@ async function init() {
         // 管理员显示管理Tab
         const adminBtn = document.getElementById('lotteryTabAdmin');
         if (adminBtn) adminBtn.style.display = amIAdmin() ? '' : 'none';
+
+        // 建立 WebSocket 连接，实现记录实时更新
+        connectWS();
 
         hideLoading();
     } catch (e) {
