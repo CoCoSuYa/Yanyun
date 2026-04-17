@@ -49,7 +49,7 @@ async function syncUserToCloud(user) {
     password_hash: user.password_hash,
     avatar_url: user.avatar_url || '',
     is_admin: user.is_admin || false,
-    lottery_count: user.lottery_count || 1,
+    lottery_count: user.lottery_count ?? 0,
     sign_in_count: user.sign_in_count || 0,
     last_sign_in_date: user.last_sign_in_date || null,
     read_notice_ids: user.read_notice_ids ? JSON.parse(user.read_notice_ids) : [],
@@ -132,6 +132,32 @@ async function syncLotteryToCloud() {
   }
 }
 
+async function syncSuggestionToCloud(suggestion) {
+  const cdb = initCloud();
+  const cloudDoc = {
+    _id: suggestion.id,
+    content: suggestion.content,
+    author_id: suggestion.author_id,
+    created_at: suggestion.created_at ? new Date(suggestion.created_at).toISOString() : new Date().toISOString(),
+    updated_at: suggestion.updated_at ? new Date(suggestion.updated_at).toISOString() : (suggestion.created_at ? new Date(suggestion.created_at).toISOString() : new Date().toISOString())
+  };
+
+  try {
+    const result = await cdb.collection('suggestions').doc(suggestion.id).update(cloudDoc);
+    if (result.updated > 0) {
+      return { success: true, action: 'updated' };
+    }
+    await cdb.collection('suggestions').add(cloudDoc);
+    return { success: true, action: 'added' };
+  } catch (err) {
+    if (err.code === 'DATABASE_DOCUMENT_NOT_EXIST') {
+      await cdb.collection('suggestions').add(cloudDoc);
+      return { success: true, action: 'added' };
+    }
+    throw err;
+  }
+}
+
 async function main() {
   console.log('[全量同步] 开始同步所有用户到云库...');
   console.log('[全量同步] 时间:', new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }));
@@ -149,25 +175,43 @@ async function main() {
       try {
         await syncUserToCloud(user);
         success++;
-        process.stdout.write(`\r[全量同步] 进度: ${i + 1}/${users.length} | 成功: ${success} | 失败: ${failed}`);
+        process.stdout.write(`\r[全量同步] 用户进度: ${i + 1}/${users.length} | 成功: ${success} | 失败: ${failed}`);
       } catch (err) {
         failed++;
-        errors.push({ user: user.game_name, id: user.id, error: err.message });
-        process.stdout.write(`\r[全量同步] 进度: ${i + 1}/${users.length} | 成功: ${success} | 失败: ${failed}`);
+        errors.push({ type: 'user', name: user.game_name, id: user.id, error: err.message });
+        process.stdout.write(`\r[全量同步] 用户进度: ${i + 1}/${users.length} | 成功: ${success} | 失败: ${failed}`);
       }
     }
 
     console.log(`\n\n[全量同步] 用户完成：成功 ${success}，失败 ${failed}`);
+
+    const suggestions = await db.query('SELECT * FROM suggestions ORDER BY created_at');
+    console.log(`\n[全量同步] 共 ${suggestions.length} 条建议待同步`);
+    let suggestionSuccess = 0;
+    let suggestionFailed = 0;
+    for (let i = 0; i < suggestions.length; i++) {
+      const suggestion = suggestions[i];
+      try {
+        await syncSuggestionToCloud(suggestion);
+        suggestionSuccess++;
+        process.stdout.write(`\r[全量同步] 建议进度: ${i + 1}/${suggestions.length} | 成功: ${suggestionSuccess} | 失败: ${suggestionFailed}`);
+      } catch (err) {
+        suggestionFailed++;
+        errors.push({ type: 'suggestion', name: suggestion.id, id: suggestion.id, error: err.message });
+        process.stdout.write(`\r[全量同步] 建议进度: ${i + 1}/${suggestions.length} | 成功: ${suggestionSuccess} | 失败: ${suggestionFailed}`);
+      }
+    }
+    console.log(`\n\n[全量同步] 建议完成：成功 ${suggestionSuccess}，失败 ${suggestionFailed}`);
 
     await syncLotteryToCloud();
     console.log('[全量同步] lottery 单例同步完成');
 
     if (errors.length > 0) {
       console.log('\n[全量同步] 失败详情:');
-      errors.forEach(e => console.log(`  - ${e.user} (${e.id}): ${e.error}`));
+      errors.forEach(e => console.log(`  - [${e.type}] ${e.name} (${e.id}): ${e.error}`));
     }
 
-    process.exit(failed > 0 ? 1 : 0);
+    process.exit(failed > 0 || suggestionFailed > 0 ? 1 : 0);
   } catch (err) {
     console.error('\n[全量同步] 异常:', err);
     process.exit(1);

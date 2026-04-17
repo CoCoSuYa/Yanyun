@@ -96,6 +96,22 @@ function normalizeDate(value) {
     return String(value);
 }
 
+function normalizeTimeValue(value) {
+    if (value === undefined || value === null || value === '') return null;
+    if (typeof value === 'string') {
+        const m = value.match(/(\d{2}:\d{2}:\d{2})$/);
+        if (m) return m[1];
+    }
+
+    const iso = normalizeDate(value);
+    if (typeof iso === 'string') {
+        const m = iso.match(/T(\d{2}:\d{2}:\d{2})/);
+        if (m) return m[1];
+    }
+
+    return normalizePrimitive(value);
+}
+
 function normalizePrimitive(value) {
     if (value === undefined || value === null) return null;
     if (typeof value === 'number') return Number.isNaN(value) ? null : value;
@@ -154,7 +170,7 @@ function normalizeTeamRecord(team) {
         type: normalizePrimitive(team.type),
         purpose: normalizePrimitive(team.purpose || ''),
         date: normalizePrimitive(team.date),
-        time: normalizeDate(team.time),
+        time: normalizeTimeValue(team.time),
         leaderId: normalizePrimitive(team.leaderId),
         members: stableSort(Array.isArray(team.members) ? team.members : []),
         maxSize: Number(team.maxSize ?? 0),
@@ -347,6 +363,10 @@ function diffObjects(mysqlObj, cloudObj, prefix = '') {
 
         if (leftIsObj && rightIsObj && !Array.isArray(left) && !Array.isArray(right)) {
             diffs.push(...diffObjects(left, right, pathKey));
+            continue;
+        }
+
+        if (pathKey === 'createdAt' || pathKey === 'updatedAt') {
             continue;
         }
 
