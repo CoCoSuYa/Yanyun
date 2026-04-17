@@ -450,7 +450,7 @@ function applySpinResultToUser(result) {
 function showSpinResult(result) {
   const isSpecial = result.fortune === SPECIAL_FORTUNE;
   const tone = isSpecial ? 'special' : fortuneToneClass(result.fortune);
-  setDrawSceneState(isSpecial ? 'special' : 'revealed', result.message || '签文已现');
+  setDrawSceneState(isSpecial ? 'special' : 'revealed', '');
   setLotteryResult(`
     <div class="result-fortune ${tone}">${esc(result.fortune || '签文')}</div>
     <div class="result-desc">${esc(result.message || '')}</div>
@@ -458,6 +458,8 @@ function showSpinResult(result) {
   renderUserLotterySummary();
   updateSpinButton();
   renderShopList();
+  renderLotteryRecords();
+  updateWinnerBanner();
 }
 
 function setLotteryResult(content, type = '', isHTML = false) {
