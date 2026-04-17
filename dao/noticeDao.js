@@ -1,10 +1,5 @@
 const db = require('../db/mysql');
-
-// 转换 ISO 8601 日期为 MySQL DATETIME 格式
-function toMySQLDateTime(isoString) {
-  if (!isoString) return null;
-  return isoString.replace('T', ' ').replace('Z', '').substring(0, 19);
-}
+const { toMySQLDateTime } = require('../utils/format');
 
 async function getAllNotices() {
   return await db.query('SELECT * FROM notices ORDER BY created_at DESC');

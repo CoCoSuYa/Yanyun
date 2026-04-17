@@ -1,0 +1,123 @@
+/* ===== SIDEBAR ===== */
+.sidebar {
+  width: 232px;
+  min-width: 232px;
+  background: linear-gradient(180deg, #1a0e06 0%, #120b04 100%);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  transition: transform .28s cubic-bezier(.4, 0, .2, 1);
+  z-index: 200;
+}
+
+.sidebar-hd {
+  padding: 14px 12px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: center;
+}
+
+.sidebar-hd h3 {
+  color: var(--gold);
+  font-size: 13px;
+  letter-spacing: 3px;
+}
+
+.sidebar-hd small {
+  color: var(--text-muted);
+  font-size: 11px;
+  display: block;
+  margin-top: 3px;
+}
+
+.user-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.user-item {
+  padding: 10px 12px;
+  min-height: 72px;
+  font-size: 13px;
+  color: var(--text-sec);
+  border-bottom: 1px solid rgba(200, 164, 94, .08);
+  line-height: 1.4;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: background .18s, border-color .18s;
+}
+
+.user-item:hover {
+  background: rgba(200, 164, 94, .08);
+}
+
+.user-item.me {
+  color: var(--gold-light);
+}
+
+.user-avatar-wrap {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: rgba(200, 164, 94, .08);
+  flex-shrink: 0;
+}
+
+.user-avatar {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.user-name {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+
+.user-item .style-tag {
+  font-size: 11px;
+  color: var(--gold-dim);
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+  min-width: 58px;
+  text-align: right;
+}
+
+.user-rank {
+  color: var(--gold-light);
+  font-size: 13px;
+  line-height: 1;
+}
+
+.user-sign-days {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+}
