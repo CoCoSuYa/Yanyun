@@ -74,37 +74,9 @@ export function syncLotteryState(data = {}) {
   renderUserLotterySummary();
 }
 
-// ---------- 浮标入口 ----------
-let _lotteryEntryExpanded = false;
-
-function _collapseLotteryEntry() {
-  const el = document.getElementById('lotteryEntry');
-  if (!el) return;
-  clearTimeout(el._timer);
-  el.classList.remove('visible');
-  _lotteryEntryExpanded = false;
-}
-
-export function showLotteryEntryBriefly() {
-  const el = document.getElementById('lotteryEntry');
-  if (!el || _lotteryEntryExpanded) return;
-  _lotteryEntryExpanded = true;
-  el.classList.add('visible');
-  el._timer = setTimeout(_collapseLotteryEntry, 2500);
-}
-
-export function handleLotteryEntryClick() {
-  const el = document.getElementById('lotteryEntry');
-  if (!el) return;
-  clearTimeout(el._timer);
-  if (!_lotteryEntryExpanded) {
-    _lotteryEntryExpanded = true;
-    el.classList.add('visible');
-    el._timer = setTimeout(_collapseLotteryEntry, 3000);
-  } else {
-    _collapseLotteryEntry();
-    openLottery();
-  }
+// ---------- 页面入口 ----------
+export function openLotteryPage() {
+  window.location.href = '/?view=lottery';
 }
 
 // ---------- 弹窗开关 ----------
@@ -196,17 +168,21 @@ function renderLotteryShell() {
   if (!root) return;
 
   root.innerHTML = `
-    <div class="lottery-topbar">
-      <div class="lottery-wallet-card">
-        <div class="wallet-label">我的钱袋</div>
-        <div class="wallet-value" id="lotteryCoinBalance">0 钱</div>
-        <div class="wallet-sub" id="lotteryTotalCoins">累计求得 0 钱</div>
+    <div class="lottery-topbar lottery-topbar-compact">
+      <div class="lottery-stat-card lottery-stat-card-wide">
+        <span class="lottery-stat-label">我的钱袋</span>
+        <strong class="lottery-stat-main" id="lotteryCoinBalance">0 钱</strong>
+        <span class="lottery-stat-sub" id="lotteryTotalCoins">累计求得 0 钱</span>
       </div>
-      <div class="lottery-stats-card">
-        <div class="lottery-stat-row"><span>抽签次数</span><strong id="lotteryCountValue">0</strong></div>
-        <div class="lottery-stat-row"><span>贡献值</span><strong id="lotteryContributionValue">0</strong></div>
-        <button id="exchangeDrawBtn" class="btn btn-ghost lottery-exchange-btn" onclick="exchangeContributionDraw()">1000贡献换1签</button>
+      <div class="lottery-stat-card">
+        <span class="lottery-stat-label">抽签次数</span>
+        <strong class="lottery-stat-main" id="lotteryCountValue">0</strong>
       </div>
+      <div class="lottery-stat-card">
+        <span class="lottery-stat-label">贡献值</span>
+        <strong class="lottery-stat-main" id="lotteryContributionValue">0</strong>
+      </div>
+      <button id="exchangeDrawBtn" class="btn btn-ghost lottery-exchange-btn lottery-exchange-btn-inline" onclick="exchangeContributionDraw()">1000贡献换1签</button>
     </div>
 
     <div class="lottery-tabs">
@@ -215,7 +191,7 @@ function renderLotteryShell() {
     </div>
 
     <div id="lotteryDrawPanel" class="lottery-tab-panel">
-      <div class="draw-layout">
+      <div class="draw-layout draw-layout-wide">
         <div class="draw-main-card">
           <div class="draw-scene" id="drawScene">
             <div class="draw-scene-glow"></div>
@@ -244,10 +220,8 @@ function renderLotteryShell() {
         </div>
 
         <div class="draw-side-card">
-          <div class="draw-card-title">签文钱数范围</div>
-          <div id="fortuneTable" class="fortune-table"></div>
-          <div class="draw-card-title draw-card-gap">本周得道者</div>
-          <div class="records-section" id="recordsSection">
+          <div class="draw-card-title">本周得道者</div>
+          <div class="records-section records-section-plain" id="recordsSection">
             <div class="records-hd">
               <span class="records-title">⚔ 本周得道者</span>
               <div class="records-actions">
@@ -313,14 +287,12 @@ function renderFortuneTable() {
   const rows = items.map(item => `
     <div class="fortune-row ${fortuneToneClass(item.key)}">
       <span class="fortune-name">${esc(item.key)}</span>
-      <span class="fortune-range">${Number(item.minCoins)} - ${Number(item.maxCoins)} 钱</span>
     </div>
   `).join('');
 
   el.innerHTML = rows + `
     <div class="fortune-row fortune-special">
       <span class="fortune-name">${SPECIAL_FORTUNE}</span>
-      <span class="fortune-range">60000 钱 · 限量</span>
     </div>
   `;
 }
@@ -486,7 +458,6 @@ function showSpinResult(result) {
   setDrawSceneState(isSpecial ? 'special' : 'revealed', result.message || '签文已现');
   setLotteryResult(`
     <div class="result-fortune ${tone}">${esc(result.fortune || '签文')}</div>
-    <div class="result-coins">获得 <strong>${Number(result.coins || 0)}</strong> 钱</div>
     <div class="result-desc">${esc(result.message || '')}</div>
   `, isSpecial ? 'special' : 'won', true);
   renderUserLotterySummary();

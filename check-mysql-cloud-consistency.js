@@ -90,7 +90,8 @@ function normalizeDate(value) {
         }
     }
 
-    const d = new Date(value);
+    const normalized = typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : value;
+    const d = new Date(normalized);
     if (!Number.isNaN(d.getTime())) return d.toISOString();
 
     return String(value);

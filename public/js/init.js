@@ -21,13 +21,16 @@ import {
   setAuthFns as teamSetAuthFns
 } from './team.js';
 import { handleCreateTeam, submitCreate, setAuthFn as createSetAuthFn } from './team-create.js';
-import { showIdentityModal, switchAuthTab, submitLogin, submitRegister,
-  showEditModal, submitEdit, showEditTimeModal, setOnLoginCallbacks } from './auth.js';
 import {
-  LOT, initLottery, handleLotteryEntryClick, openLottery, closeLottery,
+  showIdentityModal, switchAuthTab, submitLogin, submitRegister,
+  showEditModal, submitEdit, showEditTimeModal, setOnLoginCallbacks
+} from './auth.js';
+import {
+  LOT, initLottery, openLottery, closeLottery,
   handleSpin, updateSpinButton, renderSlotRing, redrawWheel, renderLotteryRecords,
   adminClearBanner, adminClearWinners, submitAddCount, updateWinnerBanner,
-  openAddCountModal, closeAddCountModal
+  openAddCountModal, closeAddCountModal, switchLotteryTab,
+  exchangeContributionDraw, redeemShopItem, openLotteryPage
 } from './lottery.js';
 import {
   initSignIn, initSignInFromUserData, updateSignInFloat, doSignIn
@@ -94,10 +97,13 @@ window.closeAddCountModal = closeAddCountModal;
 window.submitAddCount = submitAddCount;
 window.adminClearBanner = adminClearBanner;
 window.adminClearWinners = adminClearWinners;
+window.switchLotteryTab = switchLotteryTab;
+window.exchangeContributionDraw = exchangeContributionDraw;
+window.redeemShopItem = redeemShopItem;
+window.openLotteryPage = openLotteryPage;
 window.doSignIn = doSignIn;
 window.toggleBgm = toggleBgm;
 window.nextBgm = nextBgm;
-window.handleLotteryEntryClick = handleLotteryEntryClick;
 window.showMsgBox = showMsgBox;
 window.hideMsgBox = hideMsgBox;
 window.switchMsgTab = _switchMsgTab;
@@ -131,9 +137,13 @@ async function init() {
   S.date = todayStr();
 
   // 读取分享链接参数
-  const joinParam = new URLSearchParams(location.search).get('join');
+  const params = new URLSearchParams(location.search);
+  const joinParam = params.get('join');
+  const openLotteryView = params.get('view') === 'lottery';
   if (joinParam) {
     S.pendingJoin = joinParam;
+  }
+  if (joinParam || openLotteryView) {
     history.replaceState({}, '', location.pathname);
   }
   console.log(`[性能] 参数处理完成: ${(performance.now() - t0).toFixed(2)}ms`);
@@ -196,7 +206,11 @@ async function init() {
       checkUnreadMessages();
       showLatestUnreadNotice();
     }
-    initLottery().catch(e => console.warn('抽奖初始化失败:', e));
+    initLottery()
+      .then(() => {
+        if (openLotteryView) openLottery();
+      })
+      .catch(e => console.warn('抽奖初始化失败:', e));
     initBgm().catch(e => console.warn('BGM初始化失败:', e));
   }, 300);
 }
