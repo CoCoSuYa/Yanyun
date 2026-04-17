@@ -12,6 +12,20 @@ const cloudbase = require('@cloudbase/node-sdk');
 
 let cloudDb = null;
 
+function parseJsonField(value, fallback) {
+  if (value === undefined || value === null || value === '') return fallback;
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'object') return value;
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return fallback;
+    }
+  }
+  return fallback;
+}
+
 // 初始化云开发
 function initCloud() {
   if (cloudDb) return cloudDb;
@@ -52,22 +66,22 @@ async function syncUserToCloud(user) {
     lottery_count: user.lottery_count ?? 0,
     sign_in_count: user.sign_in_count || 0,
     last_sign_in_date: user.last_sign_in_date || null,
-    read_notice_ids: user.read_notice_ids ? JSON.parse(user.read_notice_ids) : [],
-    read_suggestion_ids: user.read_suggestion_ids ? JSON.parse(user.read_suggestion_ids) : [],
+    read_notice_ids: parseJsonField(user.read_notice_ids, []),
+    read_suggestion_ids: parseJsonField(user.read_suggestion_ids, []),
     contribution_points: user.contribution_points || 0,
     coins: user.coins || 0,
     total_coins_earned: user.total_coins_earned || 0,
     consecutive_sign_ins: user.consecutive_sign_ins || 0,
     juejin_high_score: user.juejin_high_score || 0,
-    achievements: user.achievements ? JSON.parse(user.achievements) : [],
+    achievements: parseJsonField(user.achievements, []),
     juejin_completed: user.juejin_completed || false,
     open_id: user.open_id || null,
     juejin_last_played: user.juejin_last_played || null,
 
     // 小程序相关字段（用默认值）
-    mp_quota: user.mp_quota ? JSON.parse(user.mp_quota) : { invite: 0, full: 0, remind: 0 },
-    invite_log: user.invite_log ? JSON.parse(user.invite_log) : {},
-    pending_invites: user.pending_invites ? JSON.parse(user.pending_invites) : [],
+    mp_quota: parseJsonField(user.mp_quota, { invite: 0, full: 0, remind: 0 }),
+    invite_log: parseJsonField(user.invite_log, {}),
+    pending_invites: parseJsonField(user.pending_invites, []),
 
     created_at: user.created_at ? new Date(user.created_at).toISOString() : new Date().toISOString(),
     updated_at: user.updated_at ? new Date(user.updated_at).toISOString() : new Date().toISOString()
@@ -105,8 +119,8 @@ async function syncLotteryToCloud() {
 
   const cloudDoc = {
     _id: 'singleton',
-    slots: lottery.slots ? JSON.parse(lottery.slots) : [],
-    winners: lottery.winners ? JSON.parse(lottery.winners) : [],
+    slots: parseJsonField(lottery.slots, []),
+    winners: parseJsonField(lottery.winners, []),
     banner_cleared_at: lottery.banner_cleared_at ? new Date(lottery.banner_cleared_at).toISOString() : null,
     last_clear: lottery.last_clear ? new Date(lottery.last_clear).toISOString() : null,
     lucky_draw_remaining: Number(lottery.lucky_draw_remaining || 0),
