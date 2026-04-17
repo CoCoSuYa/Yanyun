@@ -28,7 +28,8 @@ function parseJsonField(value, fallback) {
 
 function toIsoOrFallback(value, fallback = null) {
   if (value === undefined || value === null || value === '') return fallback;
-  const d = new Date(value);
+  const normalized = typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : value;
+  const d = new Date(normalized);
   return Number.isNaN(d.getTime()) ? fallback : d.toISOString();
 }
 
