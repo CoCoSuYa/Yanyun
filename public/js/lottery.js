@@ -272,6 +272,12 @@ function renderLotteryShell() {
 
   const clearBannerBtnInner = document.getElementById('clearBannerBtnInner');
   if (clearBannerBtnInner) clearBannerBtnInner.style.display = amIAdmin() ? '' : 'none';
+  const clearRecordsBtn = document.getElementById('clearRecordsBtn');
+  if (clearRecordsBtn) clearRecordsBtn.style.display = amIAdmin() ? '' : 'none';
+  const adminTab = document.getElementById('lotteryTabAdmin');
+  if (adminTab) adminTab.style.display = amIAdmin() ? '' : 'none';
+  const addCountBtn = document.getElementById('addCountBtn');
+  if (addCountBtn) addCountBtn.style.display = amIAdmin() ? '' : 'none';
 }
 
 export function switchLotteryTab(tab) {
@@ -779,35 +785,125 @@ function unlockAudio() {
 function playShakeLoop() {
   if (!LOT.audioCtx) return;
   if (LOT.shakeCycleId) clearInterval(LOT.shakeCycleId);
-  playTone(220, 0.04, 'triangle', 0.03);
-  LOT.shakeCycleId = setInterval(() => playTone(180 + Math.random() * 90, 0.05, 'triangle', 0.025), 160);
+  const ctx = LOT.audioCtx;
+  let tick = 0;
+  const totalTicks = Math.floor(SHAKE_STAGE_MS / 120);
+  function shakeTick() {
+    tick++;
+    const intensity = Math.min(tick / 6, 1);
+    playWoodKnock(ctx, 0.03 * intensity);
+    if (Math.random() < 0.4) playBambooClatter(ctx, 0.02 * intensity);
+  }
+  shakeTick();
+  LOT.shakeCycleId = setInterval(shakeTick, 100 + Math.random() * 40);
   setTimeout(() => {
-    if (LOT.shakeCycleId) {
-      clearInterval(LOT.shakeCycleId);
-      LOT.shakeCycleId = null;
-    }
-  }, SHAKE_STAGE_MS + 120);
+    if (LOT.shakeCycleId) { clearInterval(LOT.shakeCycleId); LOT.shakeCycleId = null; }
+    playWoodKnock(ctx, 0.06);
+  }, SHAKE_STAGE_MS);
 }
 
 function playResultSound(result) {
   if (!LOT.audioCtx) return;
+  const ctx = LOT.audioCtx;
   const fortune = result?.fortune || '';
   if (fortune === SPECIAL_FORTUNE) {
-    burstCoins([880, 1040, 1320, 1560], 0.18);
-    setTimeout(() => burstCoins([960, 1240, 1480], 0.14), 180);
+    playChime(ctx, [523, 659, 784, 1047], 0.35, 0.12);
+    setTimeout(() => playChime(ctx, [587, 740, 880, 1175], 0.3, 0.10), 250);
+    setTimeout(() => playBell(ctx, 1318, 0.8, 0.08), 500);
     return;
   }
   if (fortune === '大吉' || fortune === '中吉') {
-    burstCoins([660, 820, 980], 0.1);
+    playChime(ctx, [523, 659, 784], 0.25, 0.08);
+    setTimeout(() => playBell(ctx, 1047, 0.4, 0.06), 200);
     return;
   }
-  burstCoins([300, 360], 0.05);
+  if (fortune === '吉' || fortune === '小吉') {
+    playChime(ctx, [440, 523, 659], 0.2, 0.06);
+    return;
+  }
+  playWoodBlock(ctx, 260, 0.15, 0.04);
+  setTimeout(() => playWoodBlock(ctx, 220, 0.2, 0.03), 120);
 }
 
-function burstCoins(freqs, gain) {
-  freqs.forEach((freq, index) => {
-    setTimeout(() => playTone(freq, 0.08 + index * 0.01, 'sine', gain), index * 70);
+function playWoodKnock(ctx, vol) {
+  const now = ctx.currentTime;
+  const bufSize = ctx.sampleRate * 0.03;
+  const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) {
+    data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufSize * 0.15));
+  }
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass'; bp.frequency.value = 800 + Math.random() * 400; bp.Q.value = 3;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(vol, now);
+  g.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
+  src.connect(bp); bp.connect(g); g.connect(ctx.destination);
+  src.start(now); src.stop(now + 0.08);
+}
+
+function playBambooClatter(ctx, vol) {
+  const now = ctx.currentTime;
+  const freq = 1800 + Math.random() * 1200;
+  const osc = ctx.createOscillator();
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(freq, now);
+  osc.frequency.exponentialRampToValueAtTime(freq * 0.5, now + 0.025);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(vol, now);
+  g.gain.exponentialRampToValueAtTime(0.0001, now + 0.03);
+  osc.connect(g); g.connect(ctx.destination);
+  osc.start(now); osc.stop(now + 0.04);
+}
+
+function playChime(ctx, freqs, duration, vol) {
+  const now = ctx.currentTime;
+  freqs.forEach((freq, i) => {
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, now);
+    const g = ctx.createGain();
+    const t = now + i * 0.06;
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.linearRampToValueAtTime(vol * (1 - i * 0.15), t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+    osc.connect(g); g.connect(ctx.destination);
+    osc.start(t); osc.stop(t + duration + 0.05);
   });
+}
+
+function playBell(ctx, freq, duration, vol) {
+  const now = ctx.currentTime;
+  [1, 2.4, 3.0, 4.5].forEach((partial, i) => {
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = freq * partial;
+    const g = ctx.createGain();
+    const pVol = vol / (i + 1);
+    g.gain.setValueAtTime(pVol, now);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + duration / (i + 1));
+    osc.connect(g); g.connect(ctx.destination);
+    osc.start(now); osc.stop(now + duration + 0.05);
+  });
+}
+
+function playWoodBlock(ctx, freq, duration, vol) {
+  const now = ctx.currentTime;
+  const bufSize = ctx.sampleRate * 0.05;
+  const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < bufSize; i++) {
+    data[i] = Math.sin(2 * Math.PI * freq * i / ctx.sampleRate) * Math.exp(-i / (bufSize * 0.2));
+  }
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(vol, now);
+  g.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+  src.connect(g); g.connect(ctx.destination);
+  src.start(now); src.stop(now + duration + 0.05);
 }
 
 function playTone(freq, duration = 0.08, type = 'sine', gainValue = 0.05) {

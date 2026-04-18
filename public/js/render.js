@@ -46,13 +46,15 @@ export function renderUserList(immediate = false) {
 
 function _doRenderUserList() {
   const el = document.getElementById('userList');
+  if (!el) return;
   const sortedUsers = [...S.users].sort((a, b) => {
     const signDiff = (b.signInCount || 0) - (a.signInCount || 0);
     if (signDiff !== 0) return signDiff;
     return String(a.gameName || '').localeCompare(String(b.gameName || ''), 'zh-CN');
   });
 
-  document.getElementById('userCount').textContent = `共 ${sortedUsers.length} 位`;
+  const countEl = document.getElementById('userCount');
+  if (countEl) countEl.textContent = `共 ${sortedUsers.length} 位`;
   el.innerHTML = sortedUsers.map((u, index) => {
     const me = S.user && u.id === S.user.id;
     const avatar = getUserAvatar(u);
@@ -92,6 +94,7 @@ export function setSelectDateFn(fn) { _selectDateFn = fn; }
 
 export function renderDateRow() {
   const row = document.getElementById('dateRow');
+  if (!row) return;
   row.innerHTML = '';
   dateRange().forEach(d => {
     const ds = localDateStr(d);
@@ -113,6 +116,7 @@ export function setShowKickPopupFn(fn) { _showKickPopupFn = fn; }
 
 export function renderTeams() {
   const wrap = document.getElementById('teamsWrap');
+  if (!wrap) return;
   const list = S.teams
     .filter(t => t.date === S.date)
     .sort((a, b) => new Date(a.time) - new Date(b.time));
