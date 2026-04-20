@@ -242,11 +242,75 @@ async function setCheckinDays(username, days) {
   return { success: true, gameName: user.gameName, signInCount: days };
 }
 
+async function adminUpdateUser(targetUserId, { gameName, mainStyle, subStyle, newPassword, adminId }) {
+  const users = cache.getUsers();
+  const admin = users.find(u => u.id === adminId);
+  if (!admin || !admin.isAdmin) return { error: '非管理员，无此权限', status: 403 };
+
+  const user = users.find(u => u.id === targetUserId);
+  if (!user) return { error: '用户不存在', status: 404 };
+
+  if (!gameName || !gameName.trim()) return { error: '游戏名不可为空', status: 400 };
+  if (!mainStyle || !/^[\u4e00-\u9fa5]{1,2}$/.test(mainStyle)) return { error: '主流派仅允许最多2个中文字符', status: 400 };
+  if (subStyle && !/^[\u4e00-\u9fa5]{1,2}$/.test(subStyle)) return { error: '副流派仅允许最多2个中文字符', status: 400 };
+
+  const nameConflict = users.find(u => u.gameName === gameName.trim() && u.id !== targetUserId);
+  if (nameConflict) return { error: '此名已被江湖同侪占用，请另择他名', status: 409 };
+
+  if (newPassword) {
+    if (newPassword.length < 6) return { error: '新密码不可少于6位', status: 400 };
+    user.passwordHash = hashPassword(newPassword);
+  }
+
+  user.gameName = gameName.trim();
+  user.mainStyle = mainStyle;
+  user.subStyle = subStyle || '';
+
+  const updateData = {
+    game_name: user.gameName,
+    main_style: user.mainStyle,
+    sub_style: user.subStyle
+  };
+  if (newPassword) updateData.password_hash = user.passwordHash;
+  await userDao.updateUser(user.id, updateData);
+
+  // 异步同步到云库
+  const cloudUpdateData = {
+    gameName: user.gameName,
+    mainStyle: user.mainStyle,
+    subStyle: user.subStyle
+  };
+  if (newPassword) cloudUpdateData.passwordHash = user.passwordHash;
+  syncUpdateUserToCloud(user.id, cloudUpdateData).catch(() => { });
+
+  // 级联更新 teams 中的成员信息
+  const teams = cache.getTeams();
+  for (const team of teams) {
+    let changed = false;
+    team.members.forEach(m => {
+      if (m.userId === user.id) {
+        m.gameName = user.gameName;
+        m.mainStyle = user.mainStyle;
+        m.subStyle = user.subStyle;
+        changed = true;
+      }
+    });
+    if (changed) {
+      await teamDao.updateTeam(team.id, { members: JSON.stringify(team.members) });
+      syncUpdateTeamToCloud(team.id, { members: team.members }).catch(() => { });
+    }
+  }
+
+  broadcast({ type: 'user_updated', data: safeUser(user) });
+  return { user: safeUser(user) };
+}
+
 module.exports = {
   login,
   listUsers,
   createUser,
   updateUser,
+  adminUpdateUser,
   uploadAvatar,
   deleteUser,
   setCheckinDays

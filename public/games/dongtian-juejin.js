@@ -543,7 +543,7 @@
         ctx.fillStyle = '#5a300d'; ctx.fillRect(0, WORLD.surfaceY - 8, canvas.width, 12);
     }
 
-    function drawPowerup(p) { ctx.save(); ctx.font = '32px Arial'; ctx.textAlign = center; ctx.textBaseline = middle; const emoji = p.type === 'dynamite' ? '💣' : p.type === 'potion' ? '⚡' : '🍀'; ctx.fillText(emoji, p.x, p.y); ctx.restore(); }
+    function drawPowerup(p) { ctx.save(); ctx.font = '32px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; const emoji = p.type === 'dynamite' ? '💣' : p.type === 'potion' ? '⚡' : '🍀'; ctx.fillText(emoji, p.x, p.y); ctx.restore(); }
 
     function draw() {
         if (!state.started) return; drawBackground(); drawMiner(); state.objects.forEach(drawObject);

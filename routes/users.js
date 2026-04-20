@@ -27,6 +27,14 @@ router.put('/:id', async (req, res) => {
   res.json(result.user);
 });
 
+// PUT /api/users/:id/admin  (管理员编辑用户，无需原密码)
+router.put('/:id/admin', requireAdmin, async (req, res) => {
+  const { gameName, mainStyle, subStyle, newPassword, adminId } = req.body;
+  const result = await userService.adminUpdateUser(req.params.id, { gameName, mainStyle, subStyle, newPassword, adminId });
+  if (result.error) return res.status(result.status).json({ error: result.error });
+  res.json(result.user);
+});
+
 // POST /api/users/avatar
 router.post('/avatar', async (req, res) => {
   const { userId, fileName, contentType, dataUrl } = req.body || {};

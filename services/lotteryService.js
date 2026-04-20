@@ -331,7 +331,7 @@ async function clearWinners(adminId) {
     await lotteryDao.updateLottery({
       winners: JSON.stringify(lottery.winners),
       banner_cleared_at: new Date(lottery.bannerClearedAt).toISOString().slice(0, 19).replace('T', ' '),
-      last_clear: new Date(lottery.lastClear).getTime()
+      last_clear: new Date(lottery.lastClear).toISOString().slice(0, 19).replace('T', ' ')
     });
 
     syncUpdateLotteryToCloud({

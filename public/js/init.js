@@ -18,12 +18,13 @@ import {
   handleUserItemClick, setupDateSwipe, doLogout,
   setEditModalFn as teamSetEditModalFn,
   setShowEditTimeModalFn as teamSetShowEditTimeModalFn,
+  setShowAdminEditModalFn as teamSetShowAdminEditModalFn,
   setAuthFns as teamSetAuthFns
 } from './team.js';
 import { handleCreateTeam, submitCreate, setAuthFn as createSetAuthFn } from './team-create.js';
 import {
   showIdentityModal, switchAuthTab, submitLogin, submitRegister,
-  showEditModal, submitEdit, showEditTimeModal, setOnLoginCallbacks
+  showEditModal, submitEdit, showEditTimeModal, showAdminEditModal, setOnLoginCallbacks
 } from './auth.js';
 import {
   LOT, initLottery, openLottery, closeLottery,
@@ -124,6 +125,7 @@ window.toast = uiToast;
 // ---- 补充 team.js 需要的 auth 模块绑定 ----
 teamSetEditModalFn(showEditModal);
 teamSetShowEditTimeModalFn(showEditTimeModal);
+teamSetShowAdminEditModalFn(showAdminEditModal);
 
 // ---- 启动应用 ----
 async function init() {

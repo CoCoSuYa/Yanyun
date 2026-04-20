@@ -251,6 +251,10 @@ let _showEditTimeModalFn = null;
 export function setShowEditTimeModalFn(fn) { _showEditTimeModalFn = fn; }
 function showEditTimeModal(team) { if (_showEditTimeModalFn) _showEditTimeModalFn(team); }
 
+let _showAdminEditModalFn = null;
+export function setShowAdminEditModalFn(fn) { _showAdminEditModalFn = fn; }
+function showAdminEditModal(user) { if (_showAdminEditModalFn) _showAdminEditModalFn(user); }
+
 // 用户列表点击
 export function handleUserItemClick(event, userId) {
   const user = S.users.find(u => u.id === userId);
@@ -264,6 +268,7 @@ export function handleUserItemClick(event, userId) {
   }
 
   if (amIAdmin() && !me) {
+    actions.push({ label: '编辑信息', fn: () => showAdminEditModal(user) });
     actions.push({ label: '请离百业', danger: true, fn: () => deleteUser(user.id, user.gameName) });
   }
 

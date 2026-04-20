@@ -41,7 +41,7 @@ async function checkWeeklyReset() {
       await lotteryDao.updateLottery({
         winners: JSON.stringify(lottery.winners),
         banner_cleared_at: toMySQLDateTime(new Date(lottery.bannerClearedAt)),
-        last_clear: new Date(lottery.lastClear).getTime(),
+        last_clear: toMySQLDateTime(new Date(lottery.lastClear)),
         lucky_draw_remaining: Number(lottery.luckyDrawRemaining || 0),
         last_lucky_reset: toMySQLDateTime(new Date(lottery.lastLuckyReset))
       });

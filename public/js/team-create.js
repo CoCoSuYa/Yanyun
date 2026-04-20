@@ -17,7 +17,9 @@ export function showCreateModal() {
   const max = toLocalDTStr(new Date(now.getTime() + 7 * 24 * 3600 * 1000));
   let defDate = S.date;
   if (isPast(defDate)) defDate = todayStr();
-  const def = defDate + 'T20:00';
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  const def = defDate + 'T' + hh + ':' + mm;
 
   openModal('聚义成队', `
 <div class="fg">

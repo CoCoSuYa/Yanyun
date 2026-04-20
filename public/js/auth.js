@@ -240,14 +240,31 @@ function checkPendingJoin() {
 
 // ---- 修改队伍时间弹窗（供 team.js 回调调用）----
 export function showEditTimeModal(team) {
+  // 将 ISO 时间转为 datetime-local 格式 (YYYY-MM-DDTHH:MM)
+  let currentDT = '';
+  try {
+    const d = team.time ? new Date(team.time) : new Date();
+    if (!isNaN(d.getTime())) {
+      const pad = n => String(n).padStart(2, '0');
+      currentDT = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+  } catch { currentDT = ''; }
+
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const min = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const maxDate = new Date(now.getTime() + 7 * 24 * 3600 * 1000);
+  const max = `${maxDate.getFullYear()}-${pad(maxDate.getMonth() + 1)}-${pad(maxDate.getDate())}T${pad(maxDate.getHours())}:${pad(maxDate.getMinutes())}`;
+
   openModal('修改开本时间', `
 <div class="fg">
   <label class="fl">当前时间</label>
-  <input class="fi" id="e-time-old" value="${team.time}" disabled style="opacity:.5">
+  <input class="fi" id="e-time-old" value="${currentDT}" disabled style="opacity:.5">
 </div>
 <div class="fg">
   <label class="fl">新时间 <span class="req">*</span></label>
-  <input class="fi" id="e-time-new" type="time" value="${team.time}">
+  <input class="fi" id="e-time-new" type="datetime-local" value="${currentDT}" min="${min}" max="${max}">
+  <div class="fh">仅可选择未来 7 天</div>
 </div>
 <div class="global-err" id="e-time-err"></div>
 <div class="fbtns">
@@ -261,12 +278,85 @@ window.submitTeamTimeEdit = async function (teamId) {
   const newTime = document.getElementById('e-time-new').value;
   const errEl = document.getElementById('e-time-err');
   if (!newTime) return showGErr(errEl, '请选择时间');
+  const dt = new Date(newTime);
+  if (dt <= new Date()) return showGErr(errEl, '时间不可早于当前时刻');
+  const localDate = newTime.split('T')[0];
   try {
-    await api('PUT', `/api/teams/${teamId}/time`, { leaderId: S.user.id, time: newTime });
+    await api('PUT', `/api/teams/${teamId}/time`, { leaderId: S.user.id, time: dt.toISOString(), date: localDate });
     closeModal();
     renderTeams();
     toast('开本时间已更新');
   } catch (e) {
     showGErr(errEl, e.message);
   }
+};
+
+// ---- 管理员编辑用户信息弹窗 ----
+export function showAdminEditModal(targetUser) {
+  openModal('编辑游侠信息', `
+<div class="fg">
+  <label class="fl">游戏名 <span class="req">*</span></label>
+  <input class="fi" id="ae-name" value="${esc(targetUser.gameName)}" maxlength="20">
+</div>
+<div class="fg">
+  <label class="fl">百业名</label>
+  <input class="fi" value="${esc(targetUser.guildName)}" disabled style="opacity:.5;cursor:not-allowed;">
+  <div class="fh">百业名不可修改</div>
+</div>
+<div class="fg">
+  <label class="fl">主流派 <span class="req">*</span></label>
+  <input class="fi" id="ae-main" value="${esc(targetUser.mainStyle)}" maxlength="2">
+</div>
+<div class="fg">
+  <label class="fl">副流派</label>
+  <input class="fi" id="ae-sub" value="${esc(targetUser.subStyle || '')}" placeholder="选填，最多2个汉字" maxlength="2">
+</div>
+<div style="border-top:1px solid var(--border);margin:14px 0 12px;"></div>
+<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;letter-spacing:.5px;">
+  ▸ 重置密码（不改则留空，无需填写原密码）
+</div>
+<div class="fg">
+  <label class="fl">新密码</label>
+  <input class="fi" id="ae-newpwd" type="password" placeholder="至少6位" autocomplete="new-password">
+</div>
+<div class="fg">
+  <label class="fl">确认新密码</label>
+  <input class="fi" id="ae-newpwd2" type="password" placeholder="再次输入新密码" autocomplete="new-password">
+</div>
+<div class="global-err" id="ae-err"></div>
+<div class="fbtns">
+  <button class="btn btn-ghost" onclick="closeModal()">拂袖而去</button>
+  <button class="btn btn-primary" onclick="submitAdminEdit('${targetUser.id}')">落笔成册</button>
+</div>
+  `);
+}
+
+window.submitAdminEdit = async function (targetUserId) {
+  const name = document.getElementById('ae-name').value.trim();
+  const main = document.getElementById('ae-main').value.trim();
+  const sub = document.getElementById('ae-sub').value.trim();
+  const newPwd = document.getElementById('ae-newpwd').value;
+  const newPwd2 = document.getElementById('ae-newpwd2').value;
+  const errEl = document.getElementById('ae-err');
+
+  if (!name) return showGErr(errEl, '游戏名不可为空');
+  if (!main) return showGErr(errEl, '主流派不可为空');
+  if (!/^[\u4e00-\u9fa5]{1,2}$/.test(main)) return showGErr(errEl, '主流派仅允许最多2个中文字符');
+  if (sub && !/^[\u4e00-\u9fa5]{1,2}$/.test(sub)) return showGErr(errEl, '副流派仅允许最多2个中文字符');
+
+  if (newPwd) {
+    if (newPwd.length < 6) return showGErr(errEl, '新密码不可少于6位');
+    if (newPwd !== newPwd2) return showGErr(errEl, '两次密码输入不一致');
+  }
+
+  const body = { gameName: name, mainStyle: main, subStyle: sub, adminId: S.user.id };
+  if (newPwd) body.newPassword = newPwd;
+
+  try {
+    const updated = await api('PUT', `/api/users/${targetUserId}/admin`, body);
+    closeModal();
+    renderUserList();
+    renderTeams();
+    toast(`已更新 ${name} 的信息`);
+  } catch (e) { showGErr(errEl, e.message); }
 };
