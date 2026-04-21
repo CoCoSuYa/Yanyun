@@ -2,7 +2,7 @@
 // 创建队伍
 // ====================================================
 import { S } from './state.js';
-import { todayStr, isPast, toLocalDTStr } from './utils.js';
+import { todayStr, isPast, toLocalDTStr, weekday } from './utils.js';
 import { api, showLoading, hideLoading } from './api.js';
 import { openModal, closeModal, confirm2, toast, showGErr } from './ui.js';
 
