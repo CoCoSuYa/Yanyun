@@ -1,10 +1,10 @@
 /**
  * 贡献值结算定时任务
  * 每晚23:50扫描队伍并发放贡献值
- * 已去除：云同步
  */
 const cache = require('../cache');
 const userDao = require('../dao/userDao');
+const { syncUpdateUserToCloud } = require('../utils/cloudSync');
 
 async function checkTeamContributions() {
   const now = new Date();
@@ -41,6 +41,9 @@ async function checkTeamContributions() {
       try {
         await userDao.updateUser(userId, { contribution_points: user.contributionPoints });
         console.log(`[贡献值] ${user.gameName} 获得 ${points} 贡献值`);
+        
+        // 异步同步到云库（不阻塞主流程，失败静默处理）
+        syncUpdateUserToCloud(userId, { contributionPoints: user.contributionPoints }).catch(() => {});
       } catch (e) {
         console.error(`[贡献值] 更新失败: ${user.gameName}`, e);
       }
