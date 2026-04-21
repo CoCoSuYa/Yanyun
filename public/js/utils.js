@@ -29,7 +29,7 @@ export function dateRange() {
   return arr;
 }
 
-export function weekday(d) {
+export export function weekday(d) {
   return ['日', '一', '二', '三', '四', '五', '六'][d.getDay()];
 }
 

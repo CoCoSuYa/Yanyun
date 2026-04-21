@@ -95,9 +95,6 @@ export function openLottery() {
 
   const adminBtn = document.getElementById('lotteryTabAdmin');
   if (adminBtn) adminBtn.style.display = amIAdmin() ? '' : 'none';
-
-  const addCountBtn = document.getElementById('addCountBtn');
-  if (addCountBtn) addCountBtn.style.display = 'none';
 }
 
 export function closeLottery() {
@@ -276,8 +273,6 @@ function renderLotteryShell() {
   if (clearRecordsBtn) clearRecordsBtn.style.display = amIAdmin() ? '' : 'none';
   const adminTab = document.getElementById('lotteryTabAdmin');
   if (adminTab) adminTab.style.display = amIAdmin() ? '' : 'none';
-  const addCountBtn = document.getElementById('addCountBtn');
-  if (addCountBtn) addCountBtn.style.display = amIAdmin() ? '' : 'none';
 }
 
 export function switchLotteryTab(tab) {

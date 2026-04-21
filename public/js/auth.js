@@ -5,6 +5,8 @@ import { S } from './state.js';
 import { api } from './api.js';
 import { openModal, closeModal, toast, showGErr, setButtonLoading } from './ui.js';
 import { esc, saveUser } from './utils.js';
+import { weekday } from './utils.js';
+import { populateDateSelect, populateHourSelect } from './team-create.js';
 import { updateMyBadge, renderUserList, forceRenderUserList, renderTeams } from './render.js';
 
 // ---- 修改信息 ----
@@ -240,21 +242,25 @@ function checkPendingJoin() {
 
 // ---- 修改队伍时间弹窗（供 team.js 回调调用）----
 export function showEditTimeModal(team) {
-  // 将 ISO 时间转为 datetime-local 格式 (YYYY-MM-DDTHH:MM)
   let currentDT = '';
+  let curDate = '';
+  let curTime = '20:00';
   try {
     const d = team.time ? new Date(team.time) : new Date();
     if (!isNaN(d.getTime())) {
       const pad = n => String(n).padStart(2, '0');
-      currentDT = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      curDate = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+      curTime = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      currentDT = `${curDate} ${curTime}`;
+      // 取整到最近的30分钟
+      const minIdx = Math.round(d.getMinutes() / 30) * 30;
+      if (minIdx === 60) {
+        curTime = `${pad(d.getHours() + 1)}:00`;
+      } else {
+        curTime = `${pad(d.getHours())}:${pad(minIdx)}`;
+      }
     }
   } catch { currentDT = ''; }
-
-  const now = new Date();
-  const pad = n => String(n).padStart(2, '0');
-  const min = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
-  const maxDate = new Date(now.getTime() + 7 * 24 * 3600 * 1000);
-  const max = `${maxDate.getFullYear()}-${pad(maxDate.getMonth() + 1)}-${pad(maxDate.getDate())}T${pad(maxDate.getHours())}:${pad(maxDate.getMinutes())}`;
 
   openModal('修改开本时间', `
 <div class="fg">
@@ -262,9 +268,12 @@ export function showEditTimeModal(team) {
   <input class="fi" id="e-time-old" value="${currentDT}" disabled style="opacity:.5">
 </div>
 <div class="fg">
+  <label class="fl">新日期 <span class="req">*</span></label>
+  <select class="fs" id="e-date"></select>
+</div>
+<div class="fg">
   <label class="fl">新时间 <span class="req">*</span></label>
-  <input class="fi" id="e-time-new" type="datetime-local" value="${currentDT}" min="${min}" max="${max}">
-  <div class="fh">仅可选择未来 7 天</div>
+  <select class="fs" id="e-hour"></select>
 </div>
 <div class="global-err" id="e-time-err"></div>
 <div class="fbtns">
@@ -272,15 +281,21 @@ export function showEditTimeModal(team) {
   <button class="btn btn-primary" onclick="submitTeamTimeEdit('${team.id}')">确认修改</button>
 </div>
   `);
+
+  populateDateSelect('e-date', curDate, 7);
+  populateHourSelect('e-hour', curTime);
 }
 
 window.submitTeamTimeEdit = async function (teamId) {
-  const newTime = document.getElementById('e-time-new').value;
+  const dateVal = document.getElementById('e-date').value;
+  const hourVal = document.getElementById('e-hour').value;
   const errEl = document.getElementById('e-time-err');
-  if (!newTime) return showGErr(errEl, '请选择时间');
-  const dt = new Date(newTime);
+  if (!dateVal) return showGErr(errEl, '请选择日期');
+  if (!hourVal) return showGErr(errEl, '请选择时间');
+  const dt = new Date(dateVal + 'T' + hourVal);
+  if (isNaN(dt.getTime())) return showGErr(errEl, '时间格式错误');
   if (dt <= new Date()) return showGErr(errEl, '时间不可早于当前时刻');
-  const localDate = newTime.split('T')[0];
+  const localDate = dateVal;
   try {
     await api('PUT', `/api/teams/${teamId}/time`, { leaderId: S.user.id, time: dt.toISOString(), date: localDate });
     closeModal();
