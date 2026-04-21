@@ -365,6 +365,104 @@ async function syncUpdateLotteryToCloud(updates) {
 }
 
 /**
+ * 新建告示时同步到云库（失败不影响主流程）
+ * @param {Object} notice - 告示对象
+ */
+async function syncNewNoticeToCloud(notice) {
+  const db = initCloud();
+  if (!db) {
+    console.warn(`[云同步] 跳过新建告示 ${notice.id}：云开发未配置`);
+    return;
+  }
+
+  console.log(`[云同步] 开始同步告示 ${notice.id} 到云库...`);
+
+  try {
+    const cloudDoc = {
+      _id: notice.id,
+      title: notice.title,
+      content: notice.content,
+      author_id: notice.authorId,
+      created_at: notice.createdAt
+    };
+
+    const result = await db.collection('notices').add(cloudDoc);
+    console.log(`[云同步] ✓ 告示 ${notice.id} 同步成功，云库文档ID: ${result.id || notice.id}`);
+  } catch (err) {
+    console.error(`[云同步] ✗ 告示 ${notice.id} 同步失败`);
+    console.error(`[云同步] 错误类型: ${err.name || 'Unknown'}`);
+    console.error(`[云同步] 错误信息: ${err.message}`);
+    if (err.stack) {
+      console.error(`[云同步] 错误堆栈:\n${err.stack.split('\n').slice(0, 5).join('\n')}`);
+    }
+  }
+}
+
+/**
+ * 删除告示时同步删除云库数据（失败不影响主流程）
+ * @param {string} noticeId - 告示 ID
+ */
+async function syncDeleteNoticeFromCloud(noticeId) {
+  const db = initCloud();
+  if (!db) {
+    console.warn(`[云同步] 跳过删除告示 ${noticeId}：云开发未配置`);
+    return;
+  }
+
+  console.log(`[云同步] 开始从云库删除告示 ${noticeId}...`);
+
+  try {
+    const result = await db.collection('notices').doc(noticeId).remove();
+
+    if (result.deleted === 0) {
+      console.error(`[云同步] ✗ 告示 ${noticeId} 删除失败：云库中不存在该文档（deleted=0）`);
+    } else {
+      console.log(`[云同步] ✓ 告示 ${noticeId} 已从云库删除，删除数量: ${result.deleted}`);
+    }
+  } catch (err) {
+    console.error(`[云同步] ✗ 告示 ${noticeId} 从云库删除失败`);
+    console.error(`[云同步] 错误类型: ${err.name || 'Unknown'}`);
+    console.error(`[云同步] 错误信息: ${err.message}`);
+    if (err.stack) {
+      console.error(`[云同步] 错误堆栈:\n${err.stack.split('\n').slice(0, 5).join('\n')}`);
+    }
+  }
+}
+
+/**
+ * 新建建议时同步到云库（失败不影响主流程）
+ * @param {Object} suggestion - 建议对象
+ */
+async function syncNewSuggestionToCloud(suggestion) {
+  const db = initCloud();
+  if (!db) {
+    console.warn(`[云同步] 跳过新建建议 ${suggestion.id}：云开发未配置`);
+    return;
+  }
+
+  console.log(`[云同步] 开始同步建议 ${suggestion.id} 到云库...`);
+
+  try {
+    const cloudDoc = {
+      _id: suggestion.id,
+      content: suggestion.content,
+      author_id: suggestion.authorId,
+      created_at: suggestion.createdAt
+    };
+
+    const result = await db.collection('suggestions').add(cloudDoc);
+    console.log(`[云同步] ✓ 建议 ${suggestion.id} 同步成功，云库文档ID: ${result.id || suggestion.id}`);
+  } catch (err) {
+    console.error(`[云同步] ✗ 建议 ${suggestion.id} 同步失败`);
+    console.error(`[云同步] 错误类型: ${err.name || 'Unknown'}`);
+    console.error(`[云同步] 错误信息: ${err.message}`);
+    if (err.stack) {
+      console.error(`[云同步] 错误堆栈:\n${err.stack.split('\n').slice(0, 5).join('\n')}`);
+    }
+  }
+}
+
+/**
  * 删除建议时同步删除云库数据（失败不影响主流程）
  * @param {string} suggestionId - 建议 ID
  */
@@ -404,5 +502,8 @@ module.exports = {
   syncUpdateTeamToCloud,
   syncDeleteTeamFromCloud,
   syncUpdateLotteryToCloud,
+  syncNewNoticeToCloud,
+  syncDeleteNoticeFromCloud,
+  syncNewSuggestionToCloud,
   syncDeleteSuggestionFromCloud
 };

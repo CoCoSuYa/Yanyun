@@ -146,7 +146,7 @@ function toLotteryObject(mysqlLottery) {
     slots: parseJSON(mysqlLottery.slots, []),
     winners: parseJSON(mysqlLottery.winners, []),
     bannerClearedAt: mysqlLottery.banner_cleared_at,
-    lastClear: mysqlLottery.last_clear || null,
+    lastClear: mysqlLottery.last_clear ? new Date(Number(mysqlLottery.last_clear)).toISOString() : null,
     luckyDrawRemaining: Number(mysqlLottery.lucky_draw_remaining || 0),
     lastLuckyReset: mysqlLottery.last_lucky_reset || null
   } : {
