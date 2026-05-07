@@ -164,7 +164,7 @@
         const mid = audioCtx.createOscillator(); const midGain = audioCtx.createGain();
         mid.type = 'square'; mid.frequency.setValueAtTime(120, now); mid.frequency.exponentialRampToValueAtTime(50, now + 0.2);
         midGain.gain.setValueAtTime(0.4, now); midGain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
-        mid.connect(midGain); midGain.connect(audioCtx.destination); mid.start(mid); mid.stop(now + 0.2);
+        mid.connect(midGain); midGain.connect(audioCtx.destination); mid.start(now); mid.stop(now + 0.2);
 
         const bufferSize = audioCtx.sampleRate * 0.5;
         const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
