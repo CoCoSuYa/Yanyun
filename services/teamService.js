@@ -198,19 +198,11 @@ async function kickMember(teamId, leaderId, targetUserId) {
     if (team.members.length === 0) {
       await teamDao.deleteTeam(teamId);
       teams.splice(teamIndex, 1);
-
-      // 异步同步到云库（删除队伍）
-      syncDeleteTeamFromCloud(teamId).catch(() => { });
-
       broadcast({ type: 'team_deleted', data: { id: teamId } });
       return { dissolved: true };
     }
 
     await teamDao.updateTeam(teamId, { members: JSON.stringify(team.members) });
-
-    // 异步同步到云库（更新 members）
-    syncUpdateTeamToCloud(teamId, { members: team.members }).catch(() => { });
-
     broadcast({ type: 'team_updated', data: team });
     return { team };
   } catch (e) {
